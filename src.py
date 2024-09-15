@@ -9,9 +9,9 @@ class AnnealingOutput:
     param_beta: ArrayLike 
     param_energies: ArrayLike
     param_transformed_energies: ArrayLike
-    param_stun: ArrayLike
+    param_stun: int
     param_states_alpha: ArrayLike
-    param_o_mins: ArrayLike
+    param_o_mins: float
     param_states_beta: ArrayLike
     param_num_accepts: ArrayLike
     param_num_rejects: ArrayLike
@@ -80,7 +80,7 @@ def get_energy(
         param_alpha: ArrayLike, 
         param_beta: ArrayLike, 
         param_residues: ArrayLike, 
-        param_residue_positions: ArrayLike,
+        param_distance_matrix: ArrayLike,
         param_k_1: float = 1.0, 
         param_k_2: float = 0.5
 ) -> float: 
@@ -92,7 +92,7 @@ def get_energy(
     :param alpha: Bond angle vector
     :param beta: Torsion angle vector
     :param residues: Array of the residue variables 
-    :param residue_positions: Array of the positions of residues
+    :param distance_matrix: The element d_ij gives the distance between the ith and jth residue
     :param k_1: Weight parameter for backbone bending energy 
     :param k_2: Weight parameter for the torsion energy
     :returns: float containing the potential energy value
@@ -102,25 +102,23 @@ def get_energy(
     
     """
     
-    backbone_bending_energy = np.dot(np.full((param_alpha.shape), -param_k_1), np.cos(param_alpha))
-    torsion_energy = np.dot(np.full((param_beta.shape), -param_k_2), np.cos(param_beta))
+    backbone_bending_energy = np.dot(np.full(param_alpha.shape, -param_k_1), np.cos(param_alpha))
+    torsion_energy = np.dot(np.full(param_beta.shape, -param_k_2), np.cos(param_beta))
     
     # Mask to select the required elements for the energy sum 
-    mask = np.eye((param_residues.shape, param_residues.shape), k = np.arange(2, param_residues.shape))
+    mask = np.triu(np.ones((param_residues.shape[0], param_residues.shape[0])), k=2)
     
     # Computation of the distance matrix using a vector of residue positions. 
     # An identity matrix of desired length is added to prevent division by zero. This does not affect the final calcluation as diagonal values are not included in the mask. 
-    distance_matrix = np.linalg.norm(param_residue_positions[np.newaxis, :] - param_residue_positions, axis=-1) + np.eye((param_residue_positions.shape[0], param_residue_positions.shape[0])) 
-    distance_matrix = distance_matrix**(-6) - distance_matrix**(-12)
     
-    return backbone_bending_energy + torsion_energy + 4*distance_matrix*get_coefficient(param_residues[np.newaxis, :], param_residues)
+    return backbone_bending_energy + torsion_energy + 4*param_distance_matrix*get_coefficient(param_residues[np.newaxis, :], param_residues)
 
 def get_transformed_energy( 
         param_alpha: ArrayLike, 
         param_beta: ArrayLike, 
-        param_o_min: ArrayLike,
+        param_o_min: float,
         param_residues: ArrayLike,
-        param_residue_positions: ArrayLike,
+        param_distance_matrix: ArrayLike,
         param_stun: float = 1.0,
         param_k_1: float = 1.0,
         param_k_2: float = 0.5
@@ -132,9 +130,9 @@ def get_transformed_energy(
     
     :param alpha: Bond angle vector
     :param beta: Torsion angle vector 
-    :param o_min: The smallest objective function values found so far
+    :param o_min: The smallest objective function value found so far
     :param residues: Array of the residue variables 
-    :param residue_positions: Array of the positions of residues
+    :param distance_matrix: The element d_ij gives the distance between the ith and jth residue
     :param stun: Controls how much the objective function is flattened 
     :param k_1: Weight parameter for backbone bending energy 
     :param k_2: Weight parameter for the torsion energy 
@@ -142,7 +140,7 @@ def get_transformed_energy(
     
     """
     
-    return 1-np.exp(-param_stun*(get_energy(param_alpha, param_beta, param_residues, param_residue_positions, param_k_1, param_k_2) - param_o_min[-1]))
+    return 1-np.exp(-param_stun*(get_energy(param_alpha, param_beta, param_residues, param_distance_matrix, param_k_1, param_k_2) - param_o_min))
 
 def annealer(
         residues: ArrayLike, 
@@ -167,57 +165,60 @@ def annealer(
     :param stun: It determines how much local minima are flattened by the stochastic tunneling transformation 
     :param init_alpha: An initial bond angle vector to start annealing with [-π, π]
     :param init_beta: An initial torsion angle vector to start annealing with [-π, π]
-    :param k_1: Weight paramter for backbone bending energy. Default = 1.0 
-    :param k_2: Weight paramter for torsion energy. Default = 0.5
+    :param k_1: Weight parameter for backbone bending energy. Default = 1.0 
+    :param k_2: Weight parameter for torsion energy. Default = 0.5
     :return: AnnealingOutput
     :raises ValueError: if alpha is not of size N-2 '
                         if beta is not of size N-3
     
     """
     
-    if(init_alpha.shape !=  residues.shape-2 or init_beta.shape != residues.shape-3): 
+    if(init_alpha.shape[0] !=  residues.shape[0]-2 or init_beta.shape[0] != residues.shape[0]-3): 
         raise ValueError(f'The angle vectors are not of the appropriate dimensionality.')
     
     # Initializations 
     inv_temps = np.linspace(1/high_temp, 1/low_temp, num_iterations)
     energies = np.zeros(num_iterations)
     transformed_energies = np.zeros(num_iterations)
-    stun = [] 
+    stun = 1
     states_alpha = np.zeros((num_iterations, residues.shape[0]-2))
     states_beta = np.zeros((num_iterations, residues.shape[0]-3))
-    o_min = [0]
+    o_min = 0
     accepts = np.zeros(num_iterations)
     rejects = np.zeros(num_iterations)
-
-    if init_alpha == None: 
-        alpha_v = np.random.uniform(-np.pi, np.pi, residues.size-2)
+    
+    if init_alpha is None: 
+        alpha_v = np.random.uniform(-np.pi, np.pi, residues.shape[0]-2)
     else: 
         alpha_v = init_alpha
-
-    if init_beta == None: 
-        beta_v = np.random.uniform(-np.pi, np.pi, residues.size-3)
+    
+    if init_beta is None: 
+        beta_v = np.random.uniform(-np.pi, np.pi, residues.shape[0]-3)
     else: 
         beta_v = init_beta
     
     residue_positions = get_residue_positions(
         param_alphas=alpha_v, 
         param_betas=beta_v, 
-        param_size=residues.size
+        param_size=residues.shape[0]
     )
 
+    distance_matrix = np.triu(np.linalg.norm(residue_positions[:, np.newaxis] - residue_positions, axis=-1), k=2)
+    distance_matrix = distance_matrix ** (-6) - distance_matrix ** (-12)
+    
     transformed_energy = get_transformed_energy(
         param_alpha=alpha_v, 
         param_beta=beta_v, 
-        param_o_min=o_min[-1],
+        param_o_min=o_min,
         param_residues=residues, 
-        param_residue_positions=residue_positions, 
-        param_stun=len(stun)+1
+        param_distance_matrix=distance_matrix,
+        param_stun=stun
     )
-
+    
     random_numbers = np.random.random(num_iterations)
     random_modifications_alpha = np.random.uniform(-0.1, 0.1, (alpha_v.size))
     random_modifications_beta = np.random.uniform(-0.1, 0.1, (beta_v.size))
-
+    
     for step in range(num_iterations): 
         
         # Log the current values
@@ -226,7 +227,7 @@ def annealer(
                 param_alpha=alpha_v, 
                 param_beta=beta_v, 
                 param_residues=residues, 
-                param_residue_positions=residue_positions, 
+                param_distance_matrix=distance_matrix
                 )
         states_alpha[step] = alpha_v
         states_beta[step] = beta_v
@@ -243,10 +244,10 @@ def annealer(
         new_transformed_energy = get_transformed_energy(
         param_alpha=new_alpha_v, 
         param_beta=new_beta_v, 
-        param_o_min=o_min[-1],
+        param_o_min=o_min,
         param_residues=residues, 
-        param_residue_positions=residue_positions, 
-        param_stun=len(stun)+1
+        param_distance_matrix=distance_matrix,
+        param_stun=stun
         ) 
         energy_change = new_transformed_energy - transformed_energy
         
@@ -256,17 +257,17 @@ def annealer(
         # accept or reject the new vectors using the metropolis condition
         if random_numbers[step] < boltzmann_factor: 
             alpha_v = new_alpha_v   
-            energy += energy_change
+            transformed_energy += energy_change
             accepts[step] = 1
         else: 
             rejects[step] = 1
         
         # find a new minimum for stochastic tunneling to improve itself
         if energy_change < 0: 
-            o_min.append(energies[step])
-            stun.append(1)
+            o_min = energies[step]
+            stun+=0.25
 
-    num_accepts, num_rejects = np.cumsum(accepts, dim=0), np.cumsum(rejects, dim=0)
+    num_accepts, num_rejects = np.cumsum(accepts, axis=0), np.cumsum(rejects, axis=0)
 
     annealing_attributes = { 
         'param_alpha': alpha_v,
