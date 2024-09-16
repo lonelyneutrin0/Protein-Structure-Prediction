@@ -9,15 +9,14 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+from src import get_energy, get_residue_positions
 
 
 def example(callback):
     
-    # define matrix Q, length x length with random elements between -1/2 and 1/2
-    length = 10
-    num_steps = 200_000
+    length = 5
+    num_steps = 10
     res = np.random.choice([0,1], (length))
-    
     # define annealing arguments, track time to run
     kwargs = {
         'residues': res, 
@@ -39,13 +38,13 @@ def example(callback):
 
     # if callback not specified, plot results
     plt.plot(run.param_inv_temps, run.param_energies)
-    plt.axhline(run.param_o_min, color='black', linestyle=':')
+    plt.axhline(get_energy(param_alpha=run.param_alpha, param_beta=run.param_beta, param_residues=res, param_residue_positions=get_residue_positions(res.size, run.param_alpha, run.param_beta)), color='black', linestyle=':')
     plt.grid()
     plt.xlabel(r'$\beta$')
     plt.ylabel('energy')
     plt.savefig('annealing.png', dpi=800, bbox_inches='tight')
     plt.close()
-
+    
     # plot num accepts and num rejects
     plt.plot(np.arange(num_steps) / 1e+3, run.param_num_accepts / 1e+3)
     plt.grid()
@@ -58,6 +57,6 @@ def example(callback):
 if __name__ == '__main__':
 
     mpl.use('Agg')
-
+    
     # run example without a callback
     example(None)
