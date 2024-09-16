@@ -19,6 +19,5 @@ Details about the recursive definition of residue coordinates and energy values 
 # Implementation
 The `AnnealingOutput` class serves as a container for the algorithm output. `run.py` utilizes the algorithm results and diagnostic data provided by objects of this class.
 ## v1.1
-This version of the algorithm works and produces similar results to the paper. One issue to fix in the next version is the energy difference sometimes causes `OverFlowError` 
-which leads to incorrect results. 
+This version of the algorithm works and produces similar results to the paper. One issue to fix in the next version is the energy difference sometimes causes `OverFlowError`.
 
