@@ -11,7 +11,7 @@ class AnnealingOutput:
     param_transformed_energies: ArrayLike
     param_stun: int
     param_states_alpha: ArrayLike
-    param_o_min: float
+    param_o_mins: float
     param_states_beta: ArrayLike
     param_num_accepts: ArrayLike
     param_num_rejects: ArrayLike
@@ -80,7 +80,7 @@ def get_energy(
         param_alpha: ArrayLike, 
         param_beta: ArrayLike, 
         param_residues: ArrayLike, 
-        param_distance_matrix: ArrayLike,
+        param_residue_positions: ArrayLike,
         param_k_1: float = 1.0, 
         param_k_2: float = 0.5
 ) -> float: 
@@ -102,23 +102,23 @@ def get_energy(
     
     """
     
-    backbone_bending_energy = np.dot(np.full(param_alpha.shape, -param_k_1), np.cos(param_alpha))
-    torsion_energy = np.dot(np.full(param_beta.shape, -param_k_2), np.cos(param_beta))
+    backbone_bending_energy = np.dot(np.full((param_alpha.shape[0]), -param_k_1), np.cos(param_alpha))
+    torsion_energy = np.dot(np.full((param_beta.shape[0]), -param_k_2), np.cos(param_beta))
     
-    # Mask to select the required elements for the energy sum 
-    mask = np.triu(np.ones((param_residues.shape[0], param_residues.shape[0])), k=2)
     
     # Computation of the distance matrix using a vector of residue positions. 
     # An identity matrix of desired length is added to prevent division by zero. This does not affect the final calcluation as diagonal values are not included in the mask. 
+    distance_matrix = np.linalg.norm(param_residue_positions[np.newaxis, :] - param_residue_positions, axis=-1) + np.eye((param_residue_positions.shape[0], param_residue_positions.shape[0])) 
+    distance_matrix = distance_matrix**(-6) - distance_matrix**(-12)
     
-    return backbone_bending_energy + torsion_energy + 4*param_distance_matrix*get_coefficient(param_residues[np.newaxis, :], param_residues)
+    return backbone_bending_energy + torsion_energy + np.sum(np.triu(4*distance_matrix*get_coefficient(param_residues[np.newaxis, :], param_residues)), k=2)
 
 def get_transformed_energy( 
         param_alpha: ArrayLike, 
         param_beta: ArrayLike, 
         param_o_min: float,
         param_residues: ArrayLike,
-        param_distance_matrix: ArrayLike,
+        param_residue_positions: ArrayLike,
         param_stun: float = 1.0,
         param_k_1: float = 1.0,
         param_k_2: float = 0.5
@@ -132,7 +132,7 @@ def get_transformed_energy(
     :param beta: Torsion angle vector 
     :param o_min: The smallest objective function value found so far
     :param residues: Array of the residue variables 
-    :param distance_matrix: The element d_ij gives the distance between the ith and jth residue
+    :param residue_positions: Array of the positions of residues
     :param stun: Controls how much the objective function is flattened 
     :param k_1: Weight parameter for backbone bending energy 
     :param k_2: Weight parameter for the torsion energy 
@@ -140,7 +140,7 @@ def get_transformed_energy(
     
     """
     
-    return 1-np.exp(-param_stun*(get_energy(param_alpha, param_beta, param_residues, param_distance_matrix, param_k_1, param_k_2) - param_o_min))
+    return 1-np.exp(-param_stun*(get_energy(param_alpha, param_beta, param_residues, param_residue_positions, param_k_1, param_k_2) - param_o_min))
 
 def annealer(
         residues: ArrayLike, 
@@ -202,16 +202,14 @@ def annealer(
         param_betas=beta_v, 
         param_size=residues.shape[0]
     )
-
-    distance_matrix = np.triu(np.linalg.norm(residue_positions[:, np.newaxis] - residue_positions, axis=-1), k=2)
-    distance_matrix = distance_matrix ** (-6) - distance_matrix ** (-12)
-
+    
+    
     transformed_energy = get_transformed_energy(
         param_alpha=alpha_v, 
         param_beta=beta_v, 
         param_o_min=o_min,
         param_residues=residues, 
-        param_distance_matrix=distance_matrix,
+        param_residue_positions=residue_positions,
         param_stun=stun
     )
     
@@ -227,7 +225,7 @@ def annealer(
                 param_alpha=alpha_v, 
                 param_beta=beta_v, 
                 param_residues=residues, 
-                param_distance_matrix=distance_matrix
+                param_residue_positions=residue_positions
                 )
         states_alpha[step] = alpha_v
         states_beta[step] = beta_v
@@ -246,7 +244,7 @@ def annealer(
         param_beta=new_beta_v, 
         param_o_min=o_min,
         param_residues=residues, 
-        param_distance_matrix=distance_matrix,
+        param_residue_positions=residue_positions,
         param_stun=stun
         ) 
         energy_change = new_transformed_energy - transformed_energy
@@ -276,7 +274,7 @@ def annealer(
         'param_transformed_energies': transformed_energies,
         'param_stun': stun, 
         'param_states_alpha': states_alpha,  
-        'param_o_min': o_min,
+        'param_o_mins': o_min,
         'param_states_beta': states_beta,
         'param_num_accepts': num_accepts, 
         'param_num_rejects': num_rejects, 
