@@ -11,7 +11,7 @@ class AnnealingOutput:
     param_transformed_energies: ArrayLike
     param_stun: int
     param_states_alpha: ArrayLike
-    param_o_mins: float
+    param_o_min: float
     param_states_beta: ArrayLike
     param_num_accepts: ArrayLike
     param_num_rejects: ArrayLike
@@ -205,7 +205,7 @@ def annealer(
 
     distance_matrix = np.triu(np.linalg.norm(residue_positions[:, np.newaxis] - residue_positions, axis=-1), k=2)
     distance_matrix = distance_matrix ** (-6) - distance_matrix ** (-12)
-    
+
     transformed_energy = get_transformed_energy(
         param_alpha=alpha_v, 
         param_beta=beta_v, 
@@ -276,7 +276,7 @@ def annealer(
         'param_transformed_energies': transformed_energies,
         'param_stun': stun, 
         'param_states_alpha': states_alpha,  
-        'param_o_mins': o_min,
+        'param_o_min': o_min,
         'param_states_beta': states_beta,
         'param_num_accepts': num_accepts, 
         'param_num_rejects': num_rejects, 
