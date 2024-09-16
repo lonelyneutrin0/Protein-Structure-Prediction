@@ -141,12 +141,12 @@ def annealer(
     """
     
     if init_alpha is None: 
-        alpha_v = -pi + np.random.uniform(0,1)*2*np.pi
+        alpha_v = -np.pi + 2*np.pi*np.random.uniform(size=(residues.shape[0]-2),low=0,high=1)
     else: 
         alpha_v = init_alpha
     
     if init_beta is None: 
-        beta_v = -pi + np.random.uniform(0,1)*2*np.pi 
+        beta_v = -np.pi + 2*np.pi*np.random.uniform(low=0,high=1, size=(residues.shape[0]-3))
     else: 
         beta_v = init_beta
     
@@ -160,7 +160,7 @@ def annealer(
 
     inv_temps = 1/start_temp*np.power(1/gamma, np.arange(num_iterations))
     energies = np.zeros(num_iterations)
-    conformations = np.zeros((num_iterations, residues.shape))
+    conformations = np.zeros((num_iterations, residues.shape[0], 3))
     accepts = np.zeros(num_iterations)
     rejects = np.zeros(num_iterations)
     conformation = get_conformation(
@@ -203,13 +203,12 @@ def annealer(
             param_size=residues.shape[0]
         )
         
-        args['param_alpha', 'param_beta', 'param_conformation'] = new_alpha_v, new_beta_v, new_conformation
-        
+        args['param_alpha'], args['param_beta'], args['param_conformation'] = new_alpha_v, new_beta_v, new_conformation
         # Calculate the changes in energy level
         new_energy = get_energy(**args) 
         energy_change = new_energy - energy
-        print(energy_change)
-
+        
+        
         # get the boltzmann factor corresponding to the change
         boltzmann_factor = np.exp(-inv_temps[step]*energy_change)
         
