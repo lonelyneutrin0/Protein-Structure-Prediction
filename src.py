@@ -2,6 +2,8 @@ import numpy as np
 from dataclasses import dataclass
 from numpy.typing import ArrayLike
 from numpy.random import randint 
+import time 
+
 
 @dataclass
 class AnnealingOutput:
@@ -14,7 +16,6 @@ class AnnealingOutput:
     param_num_accepts: ArrayLike
     param_num_rejects: ArrayLike
     param_inv_temps: ArrayLike
-
 
 def get_coefficient(
     param_i: bool, 
@@ -62,7 +63,7 @@ def get_conformation(
     cos_beta = np.cos(param_betas)
     sin_alpha = np.sin(param_alphas)
     sin_beta = np.sin(param_betas)
-    positions = np.zeros((param_size, 3), dtype=float)
+    positions = np.zeros((param_size, 3), dtype=np.float64)
     positions[0] = np.array([0,0,0])
     positions[1] = np.array([0,1,0])
     positions[2] = positions[1] + np.array([cos_alpha[0], sin_alpha[0], 0])
@@ -101,10 +102,9 @@ def get_energy(
     torsion_energy = -(param_k_2**param_beta.shape[0]) * np.sum(np.cos(param_beta))
     
     # Computation of the distance matrix using a vector of residue positions. 
-    distance_matrix = (np.linalg.norm(param_conformation[:, np.newaxis] - param_conformation, axis=-1))
+    distance_matrix = np.linalg.norm(param_conformation[:, np.newaxis] - param_conformation, axis=-1)
     np.fill_diagonal(distance_matrix, np.inf)
-    
-    distance_matrix = distance_matrix**(-6) - distance_matrix**(-12)
+    distance_matrix = distance_matrix**(-12) - distance_matrix**(-6)  
     total_energy = backbone_bending_energy + torsion_energy + np.sum(np.triu(4*distance_matrix*get_coefficient(param_residues[:, np.newaxis], param_residues), k=2))
     return total_energy
 
@@ -114,6 +114,7 @@ def annealer(
         end_temp: float,
         gamma: float, 
         lam: float,
+        ml: int,
         init_alpha: ArrayLike = None, 
         init_beta: ArrayLike = None,
         k_1: float = 1.0,
@@ -130,6 +131,7 @@ def annealer(
     :param end_temp: The temperature annealing ends at
     :param gamma: The cooling coefficient- T_k+1 = gamma*T_k
     :param lam: The tuned constant representing heterogeneous degree 
+    :param ml: The markov chain length, number of times to find a new neighbor at a given temperature.
     :param init_alpha: An initial bond angle vector to start annealing with [-π, π]
     :param init_beta: An initial torsion angle vector to start annealing with [-π, π]
     :param k_1: Weight parameter for backbone bending energy. Default = 1.0 
@@ -157,7 +159,7 @@ def annealer(
 
     # Force integer number of iterations
     num_iterations = (int)(np.log10(end_temp/start_temp)/np.log10(gamma))
-
+    
     inv_temps = 1/start_temp*np.power(1/gamma, np.arange(num_iterations))
     energies = np.zeros(num_iterations)
     conformations = np.zeros((num_iterations, residues.shape[0], 3))
@@ -177,7 +179,7 @@ def annealer(
     
     energy = get_energy(**args)
     random_numbers = np.random.random(num_iterations)
-
+    
     # Optimal Values
     optimal_energy = energy 
     optimal_conformation = conformation
@@ -185,48 +187,49 @@ def annealer(
     
     for step in range(num_iterations): 
         # Log the current values
-        energies[step] = energy 
+        energies[step] = energy
         conformations[step] = conformation
-
-        # Modify bond vectors and update the arguments of the energy function accordingly.
-        random_i = randint(alpha_v.shape[0]+beta_v.shape[0])
-        new_alpha_v, new_beta_v = np.copy(alpha_v), np.copy(beta_v)
-
-        if random_i >= alpha_v.shape[0]: 
-            new_beta_v[random_i - alpha_v.shape[0]] += (np.random.uniform(0,1)-0.5)*np.random.uniform(0,1)*(1-step/num_iterations)**lam
-        else: 
-            new_alpha_v[random_i] += (np.random.uniform(0,1)-0.5)*np.random.uniform(0,1)*(1-step/num_iterations)**lam
+        past = time.perf_counter()
+        for i in range(ml):
+            # Modify bond vectors and update the arguments of the energy function accordingly.
+            random_i = randint(alpha_v.shape[0]+beta_v.shape[0])
+            new_alpha_v, new_beta_v = np.copy(alpha_v), np.copy(beta_v)
+            
+            if random_i >= alpha_v.shape[0]: 
+                new_beta_v[random_i - alpha_v.shape[0]] += (np.random.uniform(0,1)-0.5)*np.random.uniform(0,1)*(1-step/num_iterations)**lam
+            
+            else: 
+                new_alpha_v[random_i] += (np.random.uniform(0,1)-0.5)*np.random.uniform(0,1)*(1-step/num_iterations)**lam
+            
+            new_conformation = get_conformation(
+                param_alphas=new_alpha_v, 
+                param_betas=new_beta_v, 
+                param_size=residues.shape[0]
+            )
+            
+            args['param_alpha'], args['param_beta'], args['param_conformation'] = new_alpha_v, new_beta_v, new_conformation
+            # Calculate the changes in energy level
+            new_energy = get_energy(**args) 
+            energy_change = new_energy - energy
+            # get the boltzmann factor corresponding to the change
+            
+            boltzmann_factor = np.exp(-inv_temps[step]*energy_change)
         
-        new_conformation = get_conformation(
-            param_alphas=new_alpha_v, 
-            param_betas=new_beta_v, 
-            param_size=residues.shape[0]
-        )
-        
-        args['param_alpha'], args['param_beta'], args['param_conformation'] = new_alpha_v, new_beta_v, new_conformation
-        # Calculate the changes in energy level
-        new_energy = get_energy(**args) 
-        energy_change = new_energy - energy
-        
-        
-        # get the boltzmann factor corresponding to the change
-        boltzmann_factor = np.exp(-inv_temps[step]*energy_change)
-        
-        # keep track of the optimal values
-        if(new_energy < optimal_energy): 
-            optimal_energy = new_energy
-            optimal_conformation = new_conformation   
-        
-        # accept or reject the new vectors using the metropolis condition
-        if energy_change < 0 or random_numbers[step] < boltzmann_factor: 
-            alpha_v = new_alpha_v   
-            beta_v = new_beta_v
-            conformation = new_conformation
-            energy += energy_change
-            accepts[step] = 1
-        else: 
-            rejects[step] = 1
-    
+            # keep track of the optimal values
+            if(new_energy < optimal_energy): 
+                optimal_energy = new_energy
+                optimal_conformation = new_conformation   
+            
+            # accept or reject the new vectors using the metropolis condition
+            if energy_change < 0 or random_numbers[step] < boltzmann_factor: 
+                alpha_v = new_alpha_v   
+                beta_v = new_beta_v
+                conformation = new_conformation
+                energy = new_energy
+                accepts[step] = 1
+            else: 
+                rejects[step] = 1
+        print(f'{step+1} Iteration, {num_iterations-step-1} Remaining \n Time Elapsed: {time.perf_counter()-past}')
     num_accepts, num_rejects = np.cumsum(accepts, axis=0), np.cumsum(rejects, axis=0)
     
     annealing_attributes = { 
@@ -242,3 +245,14 @@ def annealer(
     }
     
     return AnnealingOutput(**annealing_attributes)
+
+def artificial_protein(n):
+    S = [np.array([1]), np.array([0])]
+    
+    for i in range(2, n + 1):
+        concatenated = np.concatenate((S[i-2], S[i-1]))
+        S.append(concatenated)
+    return S[n]
+
+
+
