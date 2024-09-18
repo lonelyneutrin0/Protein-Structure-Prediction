@@ -20,7 +20,7 @@ Details about the recursive definition of residue coordinates and energy values 
 ### The objective function: 
 $$-k_1 \sum_{i=1}^{N-2} \cos \alpha_i - k_2\sum_{i=1}^{N-3} \cos \beta_i + \sum_{i=1}^{N-2}\sum_{j=i+2}^N 4C(\xi_i, \xi_j)(\frac{1}{r^6} - \frac{1}{r^{12}})$$ <br/>
 In my code, this is implemented as 
-$$\langle -k_1, \cos \mathbf{\alpha} \rangle + \langle -k_2, \cos \mathbf{\beta} \rangle + \sum 4\mathbfC_{ij}D_{ij}$$ 
+$$\langle -k_1, \cos \mathbf{\alpha} \rangle + \langle -k_2, \cos \mathbf{\beta} \rangle + \sum 4\mathbf{C_{ij}}\mathbf{D_{ij}}$$ 
 where $\alpha$ is the bond angle vector, $\beta$ is the torsion angle vector and the third term is the Lennard Jones potential between any two residues. C gives the coefficient depending on the hydrophobicity of any two residues. The matrix- vector representation of this equation allows for usage of NumPy's vectorization improving computation times. 
 ### Neighbor method 
 A random component of either the bond or torsion angle vector is chosen and altered by a small value. The variation is controlled by a heterogeneous degree parameter $\lambda$ as well as the progress of the algorithm.
