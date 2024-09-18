@@ -21,3 +21,7 @@ The `AnnealingOutput` class serves as a container for the algorithm output. `run
 ## v1.1
 This version of the algorithm works and produces similar results to the paper. One issue to fix in the next version is the energy difference sometimes causes `OverFlowError`.
 
+## v1.2
+This version of the algorithm solves the abovementioned `OverFlowError`. The algorithm is now O(`ml`*`n`), where `ml` is the markov chain length and `n` is the number of iterations. For artificial proteins, the markov chain length is set to 50000. For real proteins, it's set to `100000`. The number of iterations depends on the initial and final temperature, as well as the cooling coefficient. 
+
+
