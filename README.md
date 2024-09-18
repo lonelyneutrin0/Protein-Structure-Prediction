@@ -17,10 +17,18 @@ for which the energy function is minimum gives the optimal conformation.
 Details about the recursive definition of residue coordinates and energy values are presented in the research paper. 
 
 # Implementation
+### The objective function: 
+$$-k_1 \sum_{i=1}^{N-2} \cos \alpha_i - k_2\sum_{i=1}^{N-3} \cos \beta_i + \sum_{i=1}^{N-2}\sum_{j=i+2}^N 4C(\xi_i, \xi_j)(\frac{1}{r^6} - \frac{1}{r^{12}})$$ 
+In my code, this is implemented as 
+$$ \langle -k_1, \cos \mathbf{\alpha} \rangle + \langle -k_2, \cos \mathbf{\beta} \rangle + \sum 4\mathbfC_{ij}D_{ij}$$ 
+where $\alpha$ is the bond angle vector, $\beta$ is the torsion angle vector and the third term is the Lennard Jones potential between any two residues. C gives the coefficient depending on the hydrophobicity of any two residues. The matrix- vector representation of this equation allows for usage of NumPy's vectorization improving computation times. 
+### Neighbor method 
+A random component of either the bond or torsion angle vector is chosen and altered by a small value. The variation is controlled by a heterogeneous degree parameter $\lambda$ as well as the progress of the algorithm.
+### Parameters 
+The condition to determine the favorability of a neighbor is the Metropolis condition. The starting and ending temperature are `1.0` and `1e-12` respectively. The cooling coefficient $\gamma = 0.99$ and the heterogeneous degree used for choosing new neighbors $\lambda = 3$
 The `AnnealingOutput` class serves as a container for the algorithm output. `run.py` utilizes the algorithm results and diagnostic data provided by objects of this class.
 ## v1.1
 This version of the algorithm works and produces similar results to the paper. One issue to fix in the next version is the energy difference sometimes causes `OverFlowError`.
-
 ## v1.2
 This version of the algorithm solves the abovementioned `OverFlowError`. The algorithm is now O(`ml`*`n`), where `ml` is the markov chain length and `n` is the number of iterations. For artificial proteins, the markov chain length is set to 50000. For real proteins, it's set to `100000`. The number of iterations depends on the initial and final temperature, as well as the cooling coefficient. 
 
