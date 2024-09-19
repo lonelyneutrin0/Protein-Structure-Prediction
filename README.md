@@ -28,7 +28,7 @@ A random component of either the bond or torsion angle vector is chosen and alte
 The condition to determine the favorability of a neighbor is the Metropolis condition. The starting and ending temperature are `1.0` and `1e-12` respectively. The cooling coefficient $\gamma = 0.99$ and the heterogeneous degree used for choosing new neighbors $\lambda = 3$
 The `AnnealingOutput` class serves as a container for the algorithm output. `run.py` utilizes the algorithm results and diagnostic data provided by objects of this class.
 ## v1.1
-This version of the algorithm works and produces similar results to the paper. One issue to fix in the next version is the energy difference sometimes causes `OverFlowError`.
+This version is primitive and produces inaccurate results. One issue to fix in the next version is the energy difference sometimes causes `OverFlowError`. The annealing schedule must be optimized. 
 ## v1.2
 This version of the algorithm solves the abovementioned `OverFlowError`. The algorithm is now O(`ml`*`n`), where `ml` is the markov chain length and `n` is the number of iterations. For artificial proteins, the markov chain length is set to 50000. For real proteins, it's set to `100000`. The number of iterations depends on the initial and final temperature, as well as the cooling coefficient. 
 ## v1.3 
