@@ -31,5 +31,6 @@ The `AnnealingOutput` class serves as a container for the algorithm output. `run
 This version of the algorithm works and produces similar results to the paper. One issue to fix in the next version is the energy difference sometimes causes `OverFlowError`.
 ## v1.2
 This version of the algorithm solves the abovementioned `OverFlowError`. The algorithm is now O(`ml`*`n`), where `ml` is the markov chain length and `n` is the number of iterations. For artificial proteins, the markov chain length is set to 50000. For real proteins, it's set to `100000`. The number of iterations depends on the initial and final temperature, as well as the cooling coefficient. 
-
-
+## v1.3 
+The file `src_np.py` utilizing NumPy delivers results within ~0.5 energy units of the values in the research paper for fibonacci artificial proteins of size 13, 21, and 55, although not consistently. Further versions will aim to improve the frequency of accurate modeling.
+v1.4  will contain a PyTorch implementation. This will make it easier to upgrade to better hardware in the future, allowing for GPU parallelization. Using PyTorch will also allow for the implementation of machine learning algorithms.
