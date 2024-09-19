@@ -6,20 +6,21 @@ import time
 
 
 @dataclass
-class AnnealingOutput:
-    optimal_alpha: ArrayLike 
-    optimal_beta: ArrayLike 
-    optimal_energies: ArrayLike
-    optimal_conformations: ArrayLike
-    optimalest_energy: float 
-    optimalest_conformation: ArrayLike
-    param_num_accepts: ArrayLike
-    param_num_rejects: ArrayLike
-    param_inv_temps: ArrayLike
+class AnnealerOutput:
+    alpha: ArrayLike
+    beta: ArrayLike 
+    energies: ArrayLike
+    conformations: ArrayLike
+    optimal_energy: float 
+    optimal_conformation: ArrayLike
+    p_num_accepts: ArrayLike
+    p_num_rejects: ArrayLike
+    p_inv_temps: ArrayLike
+    residues: ArrayLike
 
 def get_coefficient(
-    param_i: bool, 
-    param_j: bool, 
+    param_i: int, 
+    param_j: int, 
 ) -> float: 
     
     """
@@ -28,11 +29,11 @@ def get_coefficient(
     If both are 1, then it returns 1 
     If one is 0, it returns 0.5 
     If both are 0, it returns 0.5
-
+    
     :param i: First residue 
     :param j: Second residue  
     """
-
+    
     if(param_i + param_j == 2): 
         return 1
     return 0.5
@@ -41,9 +42,9 @@ def get_coefficient(
 get_coefficient = np.vectorize(get_coefficient)
 
 def get_conformation(
-    param_size: int,
-    param_alphas: ArrayLike, 
-    param_betas: ArrayLike,
+    size: int, 
+    alpha: ArrayLike, 
+    beta: ArrayLike,
 ) -> ArrayLike: 
     
     """
@@ -54,31 +55,30 @@ def get_conformation(
     :param alphas: Vector of bond angles 
     :param betas: Vector of torsion angles 
     :raises ValueError: If the size is less than 3
-
+    
     """
-
-    if(param_size < 3): 
+    
+    if(size < 3): 
         raise ValueError(f'Make sure your number of residues is greater than 3')
-    cos_alpha = np.cos(param_alphas)
-    cos_beta = np.cos(param_betas)
-    sin_alpha = np.sin(param_alphas)
-    sin_beta = np.sin(param_betas)
-    positions = np.zeros((param_size, 3), dtype=np.float64)
+    cos_alpha = np.cos(alpha)
+    cos_beta = np.cos(beta)
+    sin_alpha = np.sin(alpha)
+    sin_beta = np.sin(beta)
+    positions = np.zeros((size, 3), dtype=np.float64)
     positions[0] = np.array([0,0,0])
     positions[1] = np.array([0,1,0])
     positions[2] = positions[1] + np.array([cos_alpha[0], sin_alpha[0], 0])
-    for i in range(param_size-3): 
+    for i in range(size-3): 
         positions[i+3] = positions[i+2]+np.array([cos_alpha[i+1]*cos_beta[i], sin_alpha[i+1]*cos_beta[i], sin_beta[i]]) 
-    
     return positions
 
 def get_energy(
-        param_alpha: ArrayLike, 
-        param_beta: ArrayLike, 
-        param_residues: ArrayLike, 
-        param_conformation: ArrayLike,
-        param_k_1: float = 1.0, 
-        param_k_2: float = 0.5
+    alpha: ArrayLike, 
+    beta: ArrayLike, 
+    residues: ArrayLike, 
+    conformation: ArrayLike, 
+    k_1: float=1.0, 
+    k_2: float=0.5
 ) -> float: 
     
     """ 
@@ -98,17 +98,19 @@ def get_energy(
     
     """
     
-    backbone_bending_energy = -(param_k_1**param_alpha.shape[0]) * np.sum(np.cos(param_alpha))
-    torsion_energy = -(param_k_2**param_beta.shape[0]) * np.sum(np.cos(param_beta))
+    backbone_bending_energy = -k_1 * np.sum(np.cos(alpha))
+    torsion_energy = -k_2 * np.sum(np.cos(beta))
     
     # Computation of the distance matrix using a vector of residue positions. 
-    distance_matrix = np.linalg.norm(param_conformation[:, np.newaxis] - param_conformation, axis=-1)
+    distance_matrix = np.linalg.norm(conformation[:, np.newaxis] - conformation, axis=-1)
     np.fill_diagonal(distance_matrix, np.inf)
     distance_matrix = distance_matrix**(-12) - distance_matrix**(-6)  
-    total_energy = backbone_bending_energy + torsion_energy + np.sum(np.triu(4*distance_matrix*get_coefficient(param_residues[:, np.newaxis], param_residues), k=2))
+    coeff = get_coefficient(residues[:, np.newaxis], residues).astype(np.float64)
+    coeff[coeff == 0.0] = 0.5
+    total_energy = backbone_bending_energy + torsion_energy + np.sum(np.triu(4*distance_matrix, k=2))
     return total_energy
 
-def annealer(
+def n_annealer(
         residues: ArrayLike, 
         start_temp: float,  
         end_temp: float,
@@ -119,7 +121,7 @@ def annealer(
         init_beta: ArrayLike = None,
         k_1: float = 1.0,
         k_2: float = 0.5,
-) -> AnnealingOutput: 
+) -> AnnealerOutput: 
     
     """ 
     
@@ -166,15 +168,15 @@ def annealer(
     accepts = np.zeros(num_iterations)
     rejects = np.zeros(num_iterations)
     conformation = get_conformation(
-        param_alphas=alpha_v, 
-        param_betas=beta_v, 
-        param_size=residues.shape[0]
+        alpha=alpha_v, 
+        beta=beta_v, 
+        size=residues.shape[0]
     )
     args = {
-        'param_alpha':alpha_v,
-        'param_beta': beta_v,
-        'param_residues': residues,
-        'param_conformation': conformation
+        'alpha':alpha_v,
+        'beta': beta_v,
+        'residues': residues,
+        'conformation': conformation
     }
     
     energy = get_energy(**args)
@@ -202,12 +204,12 @@ def annealer(
                 new_alpha_v[random_i] += (np.random.uniform(0,1)-0.5)*np.random.uniform(0,1)*(1-step/num_iterations)**lam
             
             new_conformation = get_conformation(
-                param_alphas=new_alpha_v, 
-                param_betas=new_beta_v, 
-                param_size=residues.shape[0]
+                alpha=new_alpha_v, 
+                beta=new_beta_v, 
+                size=residues.shape[0]
             )
             
-            args['param_alpha'], args['param_beta'], args['param_conformation'] = new_alpha_v, new_beta_v, new_conformation
+            args['alpha'], args['beta'], args['conformation'] = new_alpha_v, new_beta_v, new_conformation
             # Calculate the changes in energy level
             new_energy = get_energy(**args) 
             energy_change = new_energy - energy
@@ -233,18 +235,19 @@ def annealer(
     num_accepts, num_rejects = np.cumsum(accepts, axis=0), np.cumsum(rejects, axis=0)
     
     annealing_attributes = { 
-        'optimal_alpha': alpha_v,
-        'optimal_beta': beta_v,
-        'optimal_energies': energies,
-        'optimal_conformations': conformations,
-        'optimalest_energy': optimal_energy,
-        'optimalest_conformation': optimal_conformation,
-        'param_num_accepts': num_accepts,
-        'param_num_rejects': num_rejects,
-        'param_inv_temps': inv_temps,
+        'alpha': alpha_v,
+        'beta': beta_v,
+        'energies': energies,
+        'conformations': conformations,
+        'optimal_energy': optimal_energy,
+        'optimal_conformation': optimal_conformation,
+        'p_num_accepts': num_accepts,
+        'p_num_rejects': num_rejects,
+        'p_inv_temps': inv_temps,
+        'residues': residues
     }
     
-    return AnnealingOutput(**annealing_attributes)
+    return AnnealerOutput(**annealing_attributes)
 
 def artificial_protein(n):
     S = [np.array([1]), np.array([0])]
