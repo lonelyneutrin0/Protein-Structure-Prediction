@@ -77,7 +77,7 @@ def get_energy(
     beta: ArrayLike, 
     residues: ArrayLike, 
     conformation: ArrayLike, 
-    k_1: float=1.0, 
+    k_1: float=-1.0, 
     k_2: float=0.5
 ) -> float: 
     
@@ -107,7 +107,7 @@ def get_energy(
     distance_matrix = distance_matrix**(-12) - distance_matrix**(-6)  
     coeff = get_coefficient(residues[:, np.newaxis], residues).astype(np.float64)
     coeff[coeff == 0.0] = 0.5
-    total_energy = backbone_bending_energy + torsion_energy + np.sum(np.triu(4*distance_matrix, k=2))
+    total_energy = backbone_bending_energy + torsion_energy + np.sum(np.triu(4*distance_matrix*coeff, k=2))
     return total_energy
 
 def n_annealer(
@@ -119,7 +119,7 @@ def n_annealer(
         ml: int,
         init_alpha: ArrayLike = None, 
         init_beta: ArrayLike = None,
-        k_1: float = 1.0,
+        k_1: float = -1.0,
         k_2: float = 0.5,
 ) -> AnnealerOutput: 
     
@@ -194,29 +194,30 @@ def n_annealer(
         past = time.perf_counter()
         for i in range(ml):
             # Modify bond vectors and update the arguments of the energy function accordingly.
-            random_i = randint(alpha_v.shape[0]+beta_v.shape[0])
+            
             new_alpha_v, new_beta_v = np.copy(alpha_v), np.copy(beta_v)
-            
+            random_i = randint(alpha_v.shape[0]+beta_v.shape[0])
+            change = (np.random.uniform(0,1)-0.5)*np.random.uniform(0,1)*(1-step/num_iterations)**lam
             if random_i >= alpha_v.shape[0]: 
-                new_beta_v[random_i - alpha_v.shape[0]] += (np.random.uniform(0,1)-0.5)*np.random.uniform(0,1)*(1-step/num_iterations)**lam
-            
+                # Prevents out of bound errors
+                new_beta_v[random_i - alpha_v.shape[0]] = new_beta_v[random_i - alpha_v.shape[0]] + change if np.abs(new_beta_v[random_i - alpha_v.shape[0]] + change) < np.pi else new_beta_v[random_i - alpha_v.shape[0]]-change
             else: 
-                new_alpha_v[random_i] += (np.random.uniform(0,1)-0.5)*np.random.uniform(0,1)*(1-step/num_iterations)**lam
+                # Prevents out of bound errors
+                new_alpha_v[random_i] = new_alpha_v[random_i]+change if np.abs(new_alpha_v[random_i]+change) < np.pi else new_alpha_v[random_i]-change
             
             new_conformation = get_conformation(
                 alpha=new_alpha_v, 
                 beta=new_beta_v, 
                 size=residues.shape[0]
             )
-            
+        
             args['alpha'], args['beta'], args['conformation'] = new_alpha_v, new_beta_v, new_conformation
             # Calculate the changes in energy level
             new_energy = get_energy(**args) 
             energy_change = new_energy - energy
             # get the boltzmann factor corresponding to the change
+            boltzmann_factor = np.exp(np.clip(-inv_temps[step]*energy_change, -100, 100))
             
-            boltzmann_factor = np.exp(-inv_temps[step]*energy_change)
-        
             # keep track of the optimal values
             if(new_energy < optimal_energy): 
                 optimal_energy = new_energy
@@ -231,7 +232,7 @@ def n_annealer(
                 accepts[step] = 1
             else: 
                 rejects[step] = 1
-        print(f'{step+1} Iteration, {num_iterations-step-1} Remaining \n Time Elapsed: {time.perf_counter()-past}')
+        # print(f'{step+1} Iteration, {num_iterations-step-1} Remaining \n Time Elapsed: {time.perf_counter()-past}')
     num_accepts, num_rejects = np.cumsum(accepts, axis=0), np.cumsum(rejects, axis=0)
     
     annealing_attributes = { 
