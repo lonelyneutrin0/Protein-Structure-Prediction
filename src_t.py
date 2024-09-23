@@ -1,28 +1,42 @@
-import numpy as np 
+# pytorch implementation 
+import torch 
+import numpy as np
+from numpy.random import randint
 from dataclasses import dataclass
 from numpy.typing import ArrayLike
-from numpy.random import randint 
+import random
 import time 
-
-
-@dataclass
-class AnnealerOutput:
-    alpha: ArrayLike
-    beta: ArrayLike 
-    energies: ArrayLike
-    conformations: ArrayLike
+import math
+@dataclass 
+class AnnealerOutput: 
+    alpha: torch.tensor
+    beta: torch.tensor 
+    energies: torch.tensor
+    conformations: torch.tensor
     optimal_energy: float 
-    optimal_conformation: ArrayLike
-    p_num_accepts: ArrayLike
-    p_num_rejects: ArrayLike
-    p_inv_temps: ArrayLike
-    residues: ArrayLike
+    optimal_conformation: torch.tensor
+    p_num_accepts: torch.tensor
+    p_num_rejects: torch.tensor
+    p_inv_temps: torch.tensor
+    residues: torch.tensor
 
-def get_coefficient(
-    param_i: int, 
-    param_j: int, 
-) -> float: 
-    
+    """
+
+    Container class for the output of the annealing algorithm 
+    returns: 
+    alpha: Optimal bond angle vector 
+    beta: Optimal torsion angle vector 
+    energies: The energy series of the annealing process 
+    conformations: The conformation series of the annealing process 
+    optimal_energy: The minimum energy obtained in the annealing process 
+    optimal_conformation: The conformation corresponding to the optimal energy state 
+    p_num_accepts: The number of accepted neighbors
+    p_num_rejects: The number of rejected neighbors 
+    residues: The array of amino acid residues  
+
+    """
+
+def get_coefficient(x: torch.tensor) -> torch.tensor:
     """
     
     Return the coefficient determining the strength of interactions between two residues
@@ -31,21 +45,18 @@ def get_coefficient(
     If both are 0, it returns 0.5
     
     :param i: First residue 
-    :param j: Second residue  
+    :param j: Second residue 
+
     """
-    
-    if(param_i + param_j == 2): 
-        return 1
-    return 0.5
+    coeff_matrix = x[:, None] * x 
+    coeff_matrix[coeff_matrix == 0] = 0.5
+    return coeff_matrix
 
-# Vectorize the function
-get_coefficient = np.vectorize(get_coefficient)
-
-def get_conformation(
+def get_conformation( 
     size: int, 
-    alpha: ArrayLike, 
-    beta: ArrayLike,
-) -> ArrayLike: 
+    alpha: torch.tensor, 
+    beta: torch.tensor,
+) -> torch.tensor: 
     
     """
     
@@ -57,31 +68,36 @@ def get_conformation(
     :raises ValueError: If the size is less than 3
     
     """
+    if size< 3: 
+        raise ValueError(f'Enter a size greater than 3 to proceed')
+
+    cos_alpha = torch.cos(alpha)
+    cos_beta = torch.cos(beta)
+    sin_alpha = torch.sin(alpha)
+    sin_beta = torch.sin(beta)
+    positions = torch.zeros((size, 3), dtype=torch.float64)
+    positions[0] = torch.tensor([0, 0, 0], dtype=torch.float64)
+    positions[1] = torch.tensor([0, 1, 0], dtype=torch.float64)
+    positions[2] = positions[1] + torch.tensor([cos_alpha[0], sin_alpha[0], 0], dtype=torch.float64)
     
-    if(size < 3): 
-        raise ValueError(f'Make sure your number of residues is greater than 3')
-    cos_alpha = np.cos(alpha)
-    cos_beta = np.cos(beta)
-    sin_alpha = np.sin(alpha)
-    sin_beta = np.sin(beta)
-    positions = np.zeros((size, 3), dtype=np.float64)
-    positions[0] = np.array([0,0,0])
-    positions[1] = np.array([0,1,0])
-    positions[2] = positions[1] + np.array([cos_alpha[0], sin_alpha[0], 0])
-    for i in range(size-3): 
-        positions[i+3] = positions[i+2]+np.array([cos_alpha[i+1]*cos_beta[i], sin_alpha[i+1]*cos_beta[i], sin_beta[i]]) 
+    
+    #compute the new coordinate values 
+    dx = cos_alpha[1:size-1] * cos_beta[:size-2]
+    dy = sin_alpha[1:size-1] * cos_beta[:size-2]
+    dz = sin_beta[:size-2]
+    for i in range(3, size):
+        positions[i] = positions[i-1]+torch.stack((dx,dy,dz), dim=1)[i-3]
     return positions
 
 def get_energy(
-    alpha: ArrayLike, 
-    beta: ArrayLike, 
-    residues: ArrayLike, 
-    conformation: ArrayLike, 
-    coeff: ArrayLike,
+    alpha: torch.tensor, 
+    beta:  torch.tensor, 
+    residues:  torch.tensor, 
+    conformation:  torch.tensor, 
+    coeff: torch.tensor,
     k_1: float=-1.0, 
     k_2: float=0.5
 ) -> float: 
-    
     """ 
     
     Protein Conformation Energy Function 
@@ -90,7 +106,6 @@ def get_energy(
     :param beta: Torsion angle vector
     :param residues: Array of the residue variables 
     :param conformation: A matrix of residue positions
-    :param coeff: A matrix of coefficients based on the nature of the sequence
     :param k_1: Weight parameter for backbone bending energy 
     :param k_2: Weight parameter for the torsion energy
     :returns: float containing the potential energy value
@@ -100,33 +115,31 @@ def get_energy(
     
     """
     
-    backbone_bending_energy = -k_1 * np.sum(np.cos(alpha))
-    torsion_energy = -k_2 * np.sum(np.cos(beta))
-    
-    # Computation of the distance matrix using a vector of residue positions. 
-    distance_matrix = np.linalg.norm(conformation[:, np.newaxis] - conformation, axis=-1)
-    np.fill_diagonal(distance_matrix, np.inf)
+    # Cast to torch.tensor
+    backbone_bending_energy = -k_1*torch.sum(torch.cos(alpha))
+    torsion_energy = -k_2*torch.sum(torch.cos(beta))
+    distance_matrix = torch.linalg.norm(conformation[:, None] - conformation, dim=-1)
+    distance_matrix.fill_diagonal_(torch.inf)
     distance_matrix = distance_matrix**(-12) - distance_matrix**(-6)  
-    total_energy = backbone_bending_energy + torsion_energy + np.sum(np.triu(4*distance_matrix*coeff, k=2))
+    total_energy = backbone_bending_energy + torsion_energy + torch.sum(torch.triu(4*distance_matrix*coeff, diagonal=2))
     return total_energy
 
-def n_annealer(
-        residues: ArrayLike, 
-        start_temp: float,  
-        end_temp: float,
-        gamma: float, 
-        lam: float,
-        ml: int,
-        init_alpha: ArrayLike = None, 
-        init_beta: ArrayLike = None,
-        k_1: float = -1.0,
-        k_2: float = 0.5,
-) -> AnnealerOutput: 
-    
+def t_annealer(
+    residues:  torch.tensor, 
+    start_temp: float,  
+    end_temp: float,
+    gamma: float, 
+    lam: float,
+    ml: int,
+    init_alpha:  torch.tensor = None, 
+    init_beta:  torch.tensor = None,
+    k_1: float = -1.0,
+    k_2: float = 0.5,
+) -> torch.Tensor: 
     """ 
     
     Algorithm that performs simulated annealing paired with stochastic tunneling 
-    
+
 
     :param residues: A N bit vector containing information about the hydrophobicity of each residue {-1, 1} 
     :param start_temp: The temperature annealing starts at 
@@ -143,52 +156,43 @@ def n_annealer(
                         if beta is not of size N-3
     
     """
-    
     if init_alpha is None: 
-        alpha_v = -np.pi + 2*np.pi*np.random.uniform(size=(residues.shape[0]-2),low=0,high=1)
+        alpha_v = -torch.pi + 2*torch.pi*torch.rand(residues.shape[0]-2)
     else: 
         alpha_v = init_alpha
     
     if init_beta is None: 
-        beta_v = -np.pi + 2*np.pi*np.random.uniform(low=0,high=1, size=(residues.shape[0]-3))
+        beta_v = -torch.pi + 2*torch.pi*torch.rand(residues.shape[0]-3)
     else: 
         beta_v = init_beta
-    
+
     if(alpha_v.shape[0] !=  residues.shape[0]-2 or beta_v.shape[0] != residues.shape[0]-3): 
         raise ValueError(f'The angle vectors are not of the appropriate dimensionality.')
     
-    # Initializations 
-
-    # Force integer number of iterations
-    num_iterations = (int)(np.log10(end_temp/start_temp)/np.log10(gamma))
-    
-    inv_temps = 1/start_temp*np.power(1/gamma, np.arange(num_iterations))
-    energies = np.zeros(num_iterations)
-    conformations = np.zeros((num_iterations, residues.shape[0], 3))
-    accepts = np.zeros(num_iterations)
-    rejects = np.zeros(num_iterations)
+    num_iterations = (int)(math.log10(end_temp/start_temp)/math.log10(gamma))
+    iterations = torch.arange(num_iterations)
+    inv_temps = 1/start_temp*(1/gamma)**iterations
+    energies = torch.zeros(num_iterations)
+    conformations = torch.zeros((num_iterations, residues.shape[0], 3))
+    accepts = torch.zeros(num_iterations)
+    rejects = torch.zeros(num_iterations)
     conformation = get_conformation(
         alpha=alpha_v, 
         beta=beta_v, 
         size=residues.shape[0]
     )
-    coeff = get_coefficient(residues[:, np.newaxis], residues).astype(np.float64)
-    coeff[coeff == 0.0] = 0.5
+    coeff = get_coefficient(residues)
     args = {
         'alpha':alpha_v,
         'beta': beta_v,
         'residues': residues,
-        'conformation': conformation, 
+        'conformation': conformation,
         'coeff': coeff
     }
-    
     energy = get_energy(**args)
-    random_numbers = np.random.random(num_iterations)
-    
-    # Optimal Values
+    random_numbers = torch.from_numpy(np.random.random(num_iterations))
     optimal_energy = energy 
     optimal_conformation = conformation
-    
     for step in range(num_iterations): 
         # Log the current values
         energies[step] = energy
@@ -196,8 +200,8 @@ def n_annealer(
         past = time.perf_counter()
         for i in range(ml):
             # Modify bond vectors and update the arguments of the energy function accordingly.
-            new_alpha_v, new_beta_v = np.copy(alpha_v), np.copy(beta_v)
             random_i = randint(alpha_v.shape[0]+beta_v.shape[0])
+            new_alpha_v, new_beta_v = torch.clone(alpha_v), torch.clone(beta_v)
             change = (np.random.uniform(0,1)-0.5)*np.random.uniform(0,1)*(1-step/num_iterations)**lam
             if random_i >= alpha_v.shape[0]: 
                 # Prevents out of bound errors
@@ -205,25 +209,25 @@ def n_annealer(
             else: 
                 # Prevents out of bound errors
                 new_alpha_v[random_i] = new_alpha_v[random_i]+change if np.abs(new_alpha_v[random_i]+change) < np.pi else new_alpha_v[random_i]-change
-            
+        
             new_conformation = get_conformation(
                 alpha=new_alpha_v, 
                 beta=new_beta_v, 
                 size=residues.shape[0]
             )
-        
+            
             args['alpha'], args['beta'], args['conformation'] = new_alpha_v, new_beta_v, new_conformation
             # Calculate the changes in energy level
             new_energy = get_energy(**args) 
             energy_change = new_energy - energy
-            
+  
             # keep track of the optimal values
             if(new_energy < optimal_energy): 
                 optimal_energy = new_energy
                 optimal_conformation = new_conformation   
             
-            # accept or reject the new vectors using the metropolis condition and boltzmann factor
-            if energy_change < 0 or random_numbers[step] < np.exp(-inv_temps[step]*energy_change): 
+            # accept or reject the new vectors using the metropolis condition
+            if energy_change < 0 or random_numbers[step] < torch.exp(-inv_temps[step]*energy_change): 
                 alpha_v = new_alpha_v   
                 beta_v = new_beta_v
                 conformation = new_conformation
@@ -232,7 +236,7 @@ def n_annealer(
             else: 
                 rejects[step] = 1
         print(f'{step+1} Iteration, {num_iterations-step-1} Remaining \n Time Elapsed: {time.perf_counter()-past}')
-    num_accepts, num_rejects = np.cumsum(accepts, axis=0), np.cumsum(rejects, axis=0)
+    num_accepts, num_rejects = torch.cumsum(accepts, axis=0), torch.cumsum(rejects, axis=0)
     
     annealing_attributes = { 
         'alpha': alpha_v,
@@ -250,10 +254,10 @@ def n_annealer(
     return AnnealerOutput(**annealing_attributes)
 
 def artificial_protein(n):
-    S = [np.array([1]), np.array([0])]
+    S = [torch.array([1]), torch.array([0])]
     
     for i in range(2, n + 1):
-        concatenated = np.concatenate((S[i-2], S[i-1]))
+        concatenated = torch.concatenate((S[i-2], S[i-1]))
         S.append(concatenated)
     return S[n]
 

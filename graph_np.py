@@ -5,7 +5,6 @@ Small script with a use-case example of anneal.py
 """
 
 from src_np import n_annealer
-from src_t import t_annealer
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -14,10 +13,10 @@ from src_np import artificial_protein
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
 
-def example(s):
+def example(input_protein):
     
     fibonacci_index = 6
-    res = artificial_protein(fibonacci_index)
+    res = np.array([1 if char == 'A' else 0 for char in input_protein]) 
     
     # define annealing arguments, track time to run
     kwargs = {
@@ -26,13 +25,13 @@ def example(s):
         'end_temp': 1e-12, 
         'gamma': 0.99,
         'lam': 3.0,
-        'ml': 100,
+        'ml': 50000,
     }
    
     num_steps = (int)(np.log10(kwargs['end_temp']/kwargs['start_temp'])/np.log10(kwargs['gamma']))
     # perform run
     past = time.perf_counter()
-    run = n_annealer(**kwargs) if s=='n' else t_annealer(**kwargs)
+    run = n_annealer(**kwargs) 
     present = time.perf_counter()
     sec_elapsed = present - past
     print(f'Annealer run with {num_steps:.0f} steps took {sec_elapsed:.3f} seconds')
@@ -128,4 +127,5 @@ def example(s):
     subprocess.run(ffmpeg_cmd)
     return run.optimal_energy
 
-example('n')
+# example("ABBBBABAAABABBABBABABBAABAABBBBBAABBBAAAAAAAABBBBBBABB") #4RXN
+example("ABBABBABABBAB")
