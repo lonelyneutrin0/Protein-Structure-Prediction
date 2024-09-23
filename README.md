@@ -34,5 +34,5 @@ This version of the algorithm solves the abovementioned `OverFlowError`. The alg
 ## v1.3 
 The file `src_np.py` utilizing NumPy delivers results within ~0.5 energy units of the values in the research paper for fibonacci artificial proteins of size 13, 21, and 55, although not consistently. Further versions will aim to improve the frequency of accurate modeling.
 
-#v1.4 
+# v1.4 
 A PyTorch version was written for the future to take advantage of GPU acceleration. The NumPy version was tested on the protein 4RXN and yielded an energy value `-172.059076`, close to the optimal value of `-174.612`. The annealing took just over 15 hours. 
