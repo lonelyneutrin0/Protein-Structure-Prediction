@@ -17,7 +17,7 @@ Details about the recursive definition of residue coordinates and energy values 
 
 # Implementation
 ### The objective function: 
-$$-k_1 \sum_{i=1}^{N-2} \cos \alpha_i - k_2\sum_{i=1}^{N-3} \cos \beta_i + \sum_{i=1}^{N-2}\sum_{j=i+2}^N 4C(\xi_i, \xi_j)(\frac{1}{r^6} - \frac{1}{r^{12}})$$ <br/>
+$$f(\alpha, \beta, \chi) = -k_1 \sum_{i=1}^{N-2} \cos \alpha_i - k_2\sum_{i=1}^{N-3} \cos \beta_i + \sum_{i=1}^{N-2}\sum_{j=i+2}^N 4C(\xi_i, \xi_j)(\frac{1}{r^6} - \frac{1}{r^{12}})$$ <br/>
 In my code, this is implemented as <br/>  
 $$f(\alpha, \beta, \chi) = \langle -k_1, \cos \mathbf{\alpha} \rangle + \langle -k_2, \cos \mathbf{\beta} \rangle + \sum 4\mathbf{C_{ij}}\mathbf{D_{ij}}$$ <br/> 
 where $\alpha$ is the bond angle vector, $\beta$ is the torsion angle vector for a given conformation $\chi$ and the third term is the Lennard Jones potential between any two residues. C gives the coefficient depending on the hydrophobicity of any two residues. The matrix- vector representation of this equation allows for usage of NumPy's vectorization improving computation times. 
