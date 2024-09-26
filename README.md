@@ -38,4 +38,4 @@ A PyTorch version was written for the future to take advantage of GPU accelerati
 
 # An Interesting Transformation 
 By clipping the value of the function to [-1000, 1000], an adaptation of stochastic tunneling can be implemented by which the non-minimal range of the function is set to zero. The minima (locl and global) are flattened to make escaping easier. The transformation utilized is <br/>
-$$g(\alpha, \beta, \chi) = -(1.1)^(-f(\alpha, \beta, \chi)$$. v1.5 will attempt to utilize this transformation to enhance performance.
+$$g(\alpha, \beta, \chi) = -(1.1)^{(-f(\alpha, \beta, \chi)}$$. v1.5 will attempt to utilize this transformation to enhance performance.
