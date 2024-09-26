@@ -18,9 +18,9 @@ Details about the recursive definition of residue coordinates and energy values 
 # Implementation
 ### The objective function: 
 $$-k_1 \sum_{i=1}^{N-2} \cos \alpha_i - k_2\sum_{i=1}^{N-3} \cos \beta_i + \sum_{i=1}^{N-2}\sum_{j=i+2}^N 4C(\xi_i, \xi_j)(\frac{1}{r^6} - \frac{1}{r^{12}})$$ <br/>
-In my code, this is implemented as 
-$$\langle -k_1, \cos \mathbf{\alpha} \rangle + \langle -k_2, \cos \mathbf{\beta} \rangle + \sum 4\mathbf{C_{ij}}\mathbf{D_{ij}}$$ 
-where $\alpha$ is the bond angle vector, $\beta$ is the torsion angle vector and the third term is the Lennard Jones potential between any two residues. C gives the coefficient depending on the hydrophobicity of any two residues. The matrix- vector representation of this equation allows for usage of NumPy's vectorization improving computation times. 
+In my code, this is implemented as <br/>  
+$$f(\alpha, \beta, \chi) = \langle -k_1, \cos \mathbf{\alpha} \rangle + \langle -k_2, \cos \mathbf{\beta} \rangle + \sum 4\mathbf{C_{ij}}\mathbf{D_{ij}}$$ <br/> 
+where $\alpha$ is the bond angle vector, $\beta$ is the torsion angle vector for a given conformation $\chi$ and the third term is the Lennard Jones potential between any two residues. C gives the coefficient depending on the hydrophobicity of any two residues. The matrix- vector representation of this equation allows for usage of NumPy's vectorization improving computation times. 
 ### Neighbor method 
 A random component of either the bond or torsion angle vector is chosen and altered by a small value. The variation is controlled by a heterogeneous degree parameter $\lambda$ as well as the progress of the algorithm.
 ### Parameters 
@@ -29,9 +29,13 @@ The `AnnealingOutput` class serves as a container for the algorithm output. `run
 ## v1.1
 This version is primitive and produces inaccurate results. One issue to fix in the next version is the energy difference sometimes causes `OverFlowError`. The annealing schedule must be optimized. 
 ## v1.2
-This version of the algorithm solves the abovementioned `OverFlowError`. The algorithm is now O(`ml`*`n`), where `ml` is the markov chain length and `n` is the number of iterations. For artificial proteins, the markov chain length is set to 50000. For real proteins, it's set to `100000`. The number of iterations depends on the initial and final temperature, as well as the cooling coefficient. 
+This version of the algorithm solves the abovementioned `OverFlowError`. The algorithm is now O(`ml`*`n`), where `ml` is the markov chain length and `n` is the number of iterations. For artificial proteins, the markov chain length is set to 50000. For real proteins, it's set to `10000`. The number of iterations depends on the initial and final temperature, as well as the cooling coefficient. 
 ## v1.3 
 The file `src_np.py` utilizing NumPy delivers results within ~0.5 energy units of the values in the research paper for fibonacci artificial proteins of size 13, 21, and 55, although not consistently. Further versions will aim to improve the frequency of accurate modeling.
 
 ## v1.4 
 A PyTorch version was written for the future to take advantage of GPU acceleration. The NumPy version was tested on the protein 4RXN and yielded an energy value `-172.059076`, close to the optimal value of `-174.612`. The annealing took just over 15 hours.
+
+# An Interesting Transformation 
+By clipping the value of the function to [-1000, 1000], an adaptation of stochastic tunneling can be implemented by which the non-minimal range of the function is set to zero. The minima (locl and global) are flattened to make escaping easier. The transformation utilized is <br/>
+$$g(\alpha, \beta, \chi) = -(1.1)^(-f(\alpha, \beta, \chi)$$. v1.5 will attempt to utilize this transformation to enhance performance.
