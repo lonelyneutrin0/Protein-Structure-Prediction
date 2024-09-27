@@ -4,7 +4,6 @@ from numpy.typing import ArrayLike
 from numpy.random import randint 
 import time 
 
-
 @dataclass
 class AnnealerOutput:
     alpha: ArrayLike
@@ -19,8 +18,7 @@ class AnnealerOutput:
     residues: ArrayLike
 
 def get_coefficient(
-    param_i: int, 
-    param_j: int, 
+    residues: ArrayLike
 ) -> float: 
     
     """
@@ -33,13 +31,10 @@ def get_coefficient(
     :param i: First residue 
     :param j: Second residue  
     """
-    
-    if(param_i + param_j == 2): 
-        return 1
-    return 0.5
+    coeff = residues[:, np.newaxis]*residues 
+    coeff[coeff == 0] = 0.5
+    return coeff
 
-# Vectorize the function
-get_coefficient = np.vectorize(get_coefficient)
 
 def get_conformation(
     size: int, 
@@ -172,8 +167,7 @@ def n_annealer(
         beta=beta_v, 
         size=residues.shape[0]
     )
-    coeff = get_coefficient(residues[:, np.newaxis], residues).astype(np.float64)
-    coeff[coeff == 0.0] = 0.5
+    coeff = get_coefficient(residues)
     args = {
         'alpha':alpha_v,
         'beta': beta_v,
@@ -256,6 +250,4 @@ def artificial_protein(n):
         concatenated = np.concatenate((S[i-2], S[i-1]))
         S.append(concatenated)
     return S[n]
-
-
 

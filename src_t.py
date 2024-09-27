@@ -46,7 +46,7 @@ def get_coefficient(x: torch.tensor) -> torch.tensor:
     
     :param i: First residue 
     :param j: Second residue 
-
+    
     """
     coeff_matrix = x[:, None] * x 
     coeff_matrix[coeff_matrix == 0] = 0.5

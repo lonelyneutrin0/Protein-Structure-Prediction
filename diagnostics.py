@@ -27,7 +27,7 @@ def example(s):
         'end_temp': 1e-12, 
         'gamma': 0.99,
         'lam': 3.0,
-        'ml': 100,
+        'ml': 10,
     }
    
     num_steps = (int)(np.log10(kwargs['end_temp']/kwargs['start_temp'])/np.log10(kwargs['gamma']))

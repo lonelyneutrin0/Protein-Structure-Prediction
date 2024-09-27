@@ -15,7 +15,6 @@ from mpl_toolkits.mplot3d import Axes3D
 
 def example(input_protein):
     
-    fibonacci_index = 6
     res = np.array([1 if char == 'A' else 0 for char in input_protein]) 
     
     # define annealing arguments, track time to run
@@ -25,7 +24,7 @@ def example(input_protein):
         'end_temp': 1e-12, 
         'gamma': 0.99,
         'lam': 3.0,
-        'ml': 50000,
+        'ml': 100,
     }
    
     num_steps = (int)(np.log10(kwargs['end_temp']/kwargs['start_temp'])/np.log10(kwargs['gamma']))
@@ -127,5 +126,6 @@ def example(input_protein):
     subprocess.run(ffmpeg_cmd)
     return run.optimal_energy
 
-# example("ABBBBABAAABABBABBABABBAABAABBBBBAABBBAAAAAAAABBBBBBABB") #4RXN
+# example("ABAABBAAABAAAABABAAABAABBAABBBAABABBAABAAAAAAAAAABAAABA") #1FCA
 example("ABBABBABABBAB")
+ 
