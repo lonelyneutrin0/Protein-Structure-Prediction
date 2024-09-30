@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import multiprocessing
 import random
+from rich import print
 # Defining required classes and methods 
 
 # Optimizer Object
@@ -14,8 +15,10 @@ class solutionObject:
     optimal_energies: float
     optimal_conformations: torch.tensor
     temps: torch.tensor
+    num_accepts: float=None
+    num_rejects: float=None
 
-
+    
     """ 
     :returns optimal_energies: Best energy value
     :returns optimal_conformations: Best conformation
@@ -23,6 +26,8 @@ class solutionObject:
     :returns boltzmen: A tensor of boltzmann values 
     :returns alpha: Bond angle vector 
     :returns beta: Torsion angle vector
+    :returns num_accepts: The number of transitions
+    :returns num_rejects: The number of rejections
     """
 
 #  Return type for each markov chain step
@@ -33,7 +38,9 @@ class annealerOutput:
     boltzmen: torch.Tensor
     alpha: torch.Tensor
     beta: torch.Tensor
-
+    num_accepts: float
+    num_rejects: float
+    
     
     """ 
     Annealer Output Container Class
@@ -43,6 +50,8 @@ class annealerOutput:
     :returns boltzmen: A tensor of boltzmann values 
     :returns alpha: Bond angle vector 
     :returns beta: Torsion angle vector
+    :returns num_accepts: Number of transitions 
+    :returns num_rejects: Number of rejections
     """
 
 @dataclass 
@@ -52,7 +61,9 @@ class runOutput:
     boltzmen: torch.Tensor
     alphas: torch.Tensor
     betas: torch.Tensor  
-    
+    run_accepts: torch.Tensor
+    run_rejects: torch.Tensor
+
     """ 
     Run Output Container Class
     :returns energies: A tensor of energy values 
@@ -61,6 +72,8 @@ class runOutput:
     :returns boltzmen: A tensor of boltzmann values 
     :returns alpha: Bond angle vector 
     :returns beta: Torsion angle vector
+    :returns run_accepts: Tensor of num_accepts per run
+    :returns run_rejects: Tensor of num_rejects per run
     """
 
 # Annealer
@@ -180,7 +193,8 @@ class Annealer:
         conformations = torch.zeros((self.ml, self.residues.shape[0], 3))
         conformation = self.get_conformation(self.alpha, self.beta)
         rannums = torch.rand(self.ml,)
-        
+        accepts = torch.zeros(self.ml,)
+        rejects = torch.zeros(self.ml,)
         energy = self.get_energy(self.alpha, self.beta)
         
         # Annealing Step 
@@ -204,19 +218,26 @@ class Annealer:
             new_conformation = self.get_conformation(new_alpha_v, new_beta_v)
             new_energy = self.get_energy(new_alpha_v, new_beta_v)
             energy_change = new_energy-energy
-            boltzmen[i] = torch.exp(-torch.clip(energy_change/self.temp, -10, 10))
+            boltzmen[i] = torch.exp(-energy_change/self.temp)
             
             if energy_change < 0 or boltzmen[i] > rannums[i]:
                  self.alpha = new_alpha_v
                  self.beta = new_beta_v
                  conformation = new_conformation
                  energy = new_energy
+                 accepts[i] = 1
+            else: 
+                rejects[i] = 1
+        num_accepts = torch.sum(accepts)
+        num_rejects = torch.sum(rejects)
         returnargs = { 
             'energies': energies, 
             'conformations': conformations,
             'boltzmen': boltzmen, 
             'alpha': self.alpha, 
             'beta': self.beta, 
+            'num_accepts': num_accepts, 
+            'num_rejects': num_rejects
         }
         return annealerOutput(**returnargs)
 
@@ -271,9 +292,14 @@ class GeneticAnnealer:
         :acceptance mean: 
         """
         energy_std = torch.std(runData.energies)
-        acceptance_mean = torch.mean(runData.boltzmen)
-        inv_t_new = (1/current_temp)+self.quality_factor*(1/energy_std)*(current_temp/energy_std)**2 * (4*acceptance_mean*(1-acceptance_mean)**2)/(2-acceptance_mean)**2 
+        acceptance_mean = torch.mean(runData.run_accepts).item()
+        print(f'[bold purple]Standard Deviation: {energy_std}[/bold purple]')
+        print(f'[bold yellow]Acceptance: {round(acceptance_mean*100/self.ml, 2)}%[/bold yellow]')
+        diff = self.quality_factor*(1/energy_std)*(current_temp/energy_std)**2 * (4*acceptance_mean*(1-acceptance_mean)**2)/(2-acceptance_mean)**2 
+        inv_t_new = (1/current_temp)+diff
+        print(f'[red]Temperature Difference: {(current_temp**2)*diff/(current_temp*diff +1)}[/red]')
         self.temp = 1/inv_t_new
+        print(f'[bold red]Temperature: {self.temp}[/bold red]\n')
     
     def selective_breeder(
             self, 
@@ -285,16 +311,12 @@ class GeneticAnnealer:
         :param runData: runOutput object with information about the run and annealers 
         """
         annealers = []
-      
-        mu_boltzmann = torch.mean(runData.boltzmen, dim=1) # Computes the mean acceptance ratio across each annealing run 
-        J_p = mu_boltzmann/torch.sum(runData.boltzmen) 
-        
-        fitness_matrix = (J_p - torch.min(J_p))/(torch.max(J_p - torch.min(J_p))) # Computes the relative fitness of each annealing run, ml x 1 matrix
-        print(f' Fitness: {fitness_matrix}')
-        print(f'Energies: {runData.energies[:, -1]}')
+        J_p = runData.run_accepts/torch.sum(runData.run_accepts)
+        fitness_matrix = (J_p - torch.min(J_p))/(torch.max(J_p-torch.min(J_p)))
+        print(f'[bold blue]Fitness: {fitness_matrix.tolist()}[/bold blue]')
         # Choose the fit annealers, cull the rest
         for i in range(fitness_matrix.shape[0]): 
-            if(fitness_matrix[i] > 0.5):  
+            if(0 <= fitness_matrix[i] <= 1):  
                 objArgs = { 
                     'temp': self.temp,
                     'lam': self.lam,
@@ -305,22 +327,14 @@ class GeneticAnnealer:
                     'beta': runData.betas[i]
                 }
                 annealers.append(Annealer(**objArgs))
+        no_parents = len(annealers)
         
         # Breeding new solutions 
         no_offspring = self.num_annealers-len(annealers)
         for i in range(no_offspring): 
             
             # Select a random fit parent and change the alpha/beta vectors a bit to produce a child
-            parent = annealers[random.randint(0,len(annealers)-1)]
-            random_i = torch.randint(low=0, high=parent.alpha.shape[0]+parent.beta.shape[0], size=(1,)).item()
-            new_alpha_v, new_beta_v = torch.clone(parent.alpha), torch.clone(parent.beta)
-            change = (torch.rand(1).item()-0.5)*torch.rand(1).item()*(1-i/self.num_iterations)**self.lam
-            if random_i >= parent.alpha.shape[0]: 
-                # Prevents out of bound errors
-                new_beta_v[random_i - parent.alpha.shape[0]] = new_beta_v[random_i - parent.alpha.shape[0]] + change if torch.abs(new_beta_v[random_i - parent.alpha.shape[0]] + change) < torch.pi else new_beta_v[random_i - parent.alpha.shape[0]]-change
-            else: 
-                # Prevents out of bound errors
-                new_alpha_v[random_i] = new_alpha_v[random_i]+change if torch.abs(new_alpha_v[random_i]+change) < torch.pi else new_alpha_v[random_i]-change
+            parent = annealers[i%no_parents]
             
             childargs = { 
                 'temp': self.temp,
@@ -328,8 +342,8 @@ class GeneticAnnealer:
                 'ml': self.ml,
                 'residues': self.residues, 
                 'no_temps': self.num_iterations,
-                'alpha': new_alpha_v,
-                'beta': new_beta_v
+                'alpha': parent.alpha,
+                'beta': parent.beta
             }
             child = Annealer(**childargs)
             annealers.append(child)
@@ -356,6 +370,8 @@ class GeneticAnnealer:
             run_boltzmen = torch.zeros(self.num_annealers, self.ml) 
             run_optimal_alphas = torch.zeros(self.num_annealers, self.residues.shape[0]-2) 
             run_optimal_betas = torch.zeros(self.num_annealers, self.residues.shape[0]-3) 
+            run_accepts = torch.zeros(self.num_annealers)
+            run_rejects = torch.zeros(self.num_annealers)
         
         for i in range(len(results)): 
             run_energies[i] = results[i].energies
@@ -363,7 +379,10 @@ class GeneticAnnealer:
             run_boltzmen[i] = results[i].boltzmen
             run_optimal_alphas[i] = results[i].alpha
             run_optimal_betas[i] = results[i].beta
-        return runOutput(run_energies, run_conformations,run_boltzmen, run_optimal_alphas, run_optimal_betas)
+            run_accepts[i] = results[i].num_accepts
+            run_rejects[i] = results[i].num_rejects
+
+        return runOutput(run_energies, run_conformations,run_boltzmen, run_optimal_alphas, run_optimal_betas, run_accepts, run_rejects)
     
     def optimize(self)->solutionObject:
         # Initializations
@@ -375,6 +394,7 @@ class GeneticAnnealer:
         for i in range(self.num_iterations): 
             temps[i]=(self.temp)
             run = self.run(new_annealers)
+            print(f'[bold green]Energy Value: {torch.mean(run.energies[:, -1]).item()}[/bold green]')
             new_annealers = self.selective_breeder(run) 
             self.temp_updater(self.temp, run)
             
@@ -389,9 +409,9 @@ class GeneticAnnealer:
     
 
 testargs = { 
-    'num_iterations': 50, 
-    'temp': 1, 
-    'num_annealers': 5, 
+    'num_iterations': 10, 
+    'temp': 100, 
+    'num_annealers': 8, 
     'ml': 1000, 
     'quality_factor': 1.5,
     'lam': 3,
@@ -400,7 +420,7 @@ testargs = {
 x = GeneticAnnealer(**testargs)
 if __name__ == "__main__": 
     output = x.optimize()
-    print(output.temps)
     for i in range(x.num_annealers): 
-       plt.plot(torch.arange(1, x.ml+1, 1), output.optimal_energies[i, :])
+       plt.plot(torch.arange(1, x.ml+1, 1), output.optimal_energies[i, :], label=f' Core {i}')
+    plt.legend()
     plt.show()
