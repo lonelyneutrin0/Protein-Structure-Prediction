@@ -171,7 +171,7 @@ class Annealer:
         
         """
         :param temp: The temperature of the annealing step 
-        :param gamma: Hyperparamter for neighborhood generation 
+        :param lam: Hyperparamter for neighborhood generation 
         :param ml: Markov chain length 
         :params k_1, k_2: Energy hyperparameters  
         :returns: annealerOutput
@@ -243,7 +243,7 @@ class Annealer:
 
 # Genetic Algorithm Handler 
 @dataclass
-class GeneticAnnealer: 
+class swarm_annealer: 
     num_iterations: int 
     temp: float
     num_annealers: int 
@@ -295,7 +295,7 @@ class GeneticAnnealer:
         acceptance_mean = torch.mean(runData.run_accepts).item()
         print(f'[bold purple]Standard Deviation: {energy_std}[/bold purple]')
         print(f'[bold yellow]Acceptance: {round(acceptance_mean*100/self.ml, 2)}%[/bold yellow]')
-        diff = self.quality_factor*(1/energy_std)*(current_temp/energy_std)**2 * (4*acceptance_mean*(1-acceptance_mean)**2)/(2-acceptance_mean)**2 
+        diff = 0.01*self.quality_factor*(1/energy_std)*(current_temp/energy_std)**2 * (4*acceptance_mean*(1-acceptance_mean)**2)/(2-acceptance_mean)**2 
         inv_t_new = (1/current_temp)+diff
         print(f'[red]Temperature Difference: {(current_temp**2)*diff/(current_temp*diff +1)}[/red]')
         self.temp = 1/inv_t_new
@@ -372,6 +372,7 @@ class GeneticAnnealer:
             run_optimal_betas = torch.zeros(self.num_annealers, self.residues.shape[0]-3) 
             run_accepts = torch.zeros(self.num_annealers)
             run_rejects = torch.zeros(self.num_annealers)
+
         
         for i in range(len(results)): 
             run_energies[i] = results[i].energies
@@ -388,17 +389,21 @@ class GeneticAnnealer:
         # Initializations
         temps = torch.zeros(self.num_iterations,)
         initial_run = self.run()
-        
+        swarm_energies = torch.zeros(self.num_annealers ,self.ml*self.num_iterations)
         new_annealers = self.selective_breeder(initial_run) 
         self.temp_updater(self.temp, initial_run)
         for i in range(self.num_iterations): 
             temps[i]=(self.temp)
             run = self.run(new_annealers)
-            print(f'[bold green]Energy Value: {torch.mean(run.energies[:, -1]).item()}[/bold green]')
+            print(f'[bold green]Energy Value: {torch.min(run.energies[:, -1]).item()}[/bold green]')
+            swarm_energies[:, i*self.ml:(i+1)*self.ml] = run.energies
             new_annealers = self.selective_breeder(run) 
             self.temp_updater(self.temp, run)
-            
-        solutionArgs = { 
+        for i in range(self.num_annealers):
+            plt.plot(torch.arange(1, self.ml*self.num_iterations+1, 1), swarm_energies[i], label=f'core_{i}')
+        plt.legend()
+        plt.show()
+        solutionArgs = {  
             'alpha': run.alphas,
             'beta': run.betas,
             'optimal_energies': run.energies,
@@ -417,7 +422,7 @@ testargs = {
     'lam': 3,
     'residues': torch.Tensor([1,0,0,1,0,0,1,0,1,0,0,1,0])
 }
-x = GeneticAnnealer(**testargs)
+x = swarm_annealer(**testargs)
 if __name__ == "__main__": 
     output = x.optimize()
     for i in range(x.num_annealers): 
