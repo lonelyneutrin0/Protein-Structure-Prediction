@@ -202,7 +202,7 @@ class Annealer:
             #Generate neighbors
             random_i = torch.randint(low=0, high=self.alpha.shape[0]+self.beta.shape[0], size=(1,)).item()
             new_alpha_v, new_beta_v = torch.clone(self.alpha), torch.clone(self.beta)
-            change = (torch.rand(1).item()-0.5)*torch.rand(1).item()*(1-i/self.no_temps)**self.lam
+            change = (torch.rand(1).item()-0.5)*torch.rand(1).item()*(1-i/self.ml)**self.lam
             if random_i >= self.alpha.shape[0]: 
                 # Prevents out of bound errors
                 new_beta_v[random_i - self.alpha.shape[0]] = new_beta_v[random_i - self.alpha.shape[0]] + change if torch.abs(new_beta_v[random_i - self.alpha.shape[0]] + change) < torch.pi else new_beta_v[random_i - self.alpha.shape[0]]-change
@@ -279,11 +279,11 @@ def child(p1: Annealer, p2: Annealer)->Annealer:
     # Compute the daughter characteristics
     lam_d = (2*p1.lam*p2.lam)/(p1.lam + p2.lam) # Harmonic mean
     alpha_d = (p1.alpha + p2.alpha)/2 
-    beta_d = (p1.alpha + p2.alpha)/2
+    beta_d = (p1.beta + p2.beta)/2
 
     # Perturb the components of bond and torsion angle vectors in the case of a mutation
     if mutation: 
-        change = (torch.rand(1).item()-0.5)*torch.rand(1).item()*(1-i/p1.no_temps)**lam_d
+        change = (torch.rand(1).item()-0.5)*torch.rand(1).item()*(1-i/p1.ml)**lam_d
         random_i = torch.randint(low=0, high=p1.alpha.shape[0]+p1.beta.shape[0], size=(1,)).item()
         if random_i >= p1.alpha.shape[0]: 
             # Prevents out of bound errors
@@ -337,7 +337,7 @@ class GeneticAnnealer:
         if annealerObject is None:  
             args = { 
                 'temp': temp, 
-                'lam': (self.lam-1) + torch.rand(1,)/item()*self.lam, # [lam-1, lam+1] 
+                'lam': (self.lam-0.5) + torch.rand(1,).item(), # [lam-1, lam+1] 
                 'ml': self.ml, 
                 'residues': self.residues, 
                 'no_temps': self.num_iterations, 
@@ -358,7 +358,7 @@ class GeneticAnnealer:
         :energy_std: Energy standard deviation of the T_i run 
         :acceptance mean: 
         """
-
+        
         # Compute the std of energy and acceptance mean across the pool 
         energy_std = torch.std(runData.energies)
         acceptance_mean = torch.mean(runData.run_accepts).item()
