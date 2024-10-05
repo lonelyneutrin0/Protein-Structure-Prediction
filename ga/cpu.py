@@ -365,7 +365,7 @@ class GeneticAnnealer:
         # Return the new temperature 
         inv_t_new = (1/current_temp)+diff
         self.temp = 1/inv_t_new
-
+    
     def crossover(self, runData: runOutput)->list: 
         """
         :param runData: The data of the run 
@@ -379,7 +379,7 @@ class GeneticAnnealer:
         # Sort in descending order of fitness
         cmpd_arr = sorted(list(zip(fit.tolist(), runData.annealers)), key=lambda x: x[0], reverse=True)
         fit, annealers = list(zip(*cmpd_arr))
-
+        
         #Accept the parents with relative fitness greater than 0.5
         parents = []
         for i in range(len(fit)): 
@@ -483,13 +483,13 @@ class GeneticAnnealer:
     
 
 testargs = { 
-    'num_iterations': 100, 
+    'num_iterations': 10, 
     'temp': 100, 
     'num_annealers': 8, 
-    'ml': 10000, 
+    'ml': 1000, 
     'quality_factor': 1.5,
     'lam': 3,
-    'residues': torch.Tensor([1,0,0,1,0,0,1,0,1,0,0,1,0]),
+    'residues': torch.Tensor([0,1,0,1,0,0,1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0]),
     'index': 0
 }
 x = GeneticAnnealer(**testargs)
@@ -502,4 +502,3 @@ if __name__ == "__main__":
         plt.legend() 
         plt.show()
         plt.close()
-    

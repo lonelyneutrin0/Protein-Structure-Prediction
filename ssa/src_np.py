@@ -17,6 +17,18 @@ class AnnealerOutput:
     p_inv_temps: ArrayLike
     residues: ArrayLike
 
+    def to_dict(self): 
+        return { 
+            'alpha': self.alpha, 
+            'beta': self.beta, 
+            'energies': self.energies, 
+            'conformations': self.conformations, 
+            'optimal_energy': self.optimal_energy, 
+            'optimal_conformation': self.optimal_conformation, 
+            'p_num_accepts': self.p_num_accepts, 
+            'p_num_rejects': self.p_num_rejects, 
+            'residues': self.residues
+        }
 def get_coefficient(
     residues: ArrayLike
 ) -> float: 
@@ -250,4 +262,3 @@ def artificial_protein(n):
         concatenated = np.concatenate((S[i-2], S[i-1]))
         S.append(concatenated)
     return S[n]
-
