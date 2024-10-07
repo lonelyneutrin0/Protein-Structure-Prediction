@@ -1,60 +1,92 @@
 import multiprocessing.pool
 import torch 
+from torch import tensor
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import multiprocessing
 import random
 from rich import print
-
-
-
-
-@dataclass 
+import os
+import json 
 class runOutput:
     annealers: list 
-    energies: torch.Tensor
-    conformations: torch.Tensor
-    boltzmen: torch.Tensor
-    alphas: torch.Tensor
-    betas: torch.Tensor  
-    run_accepts: torch.Tensor
-    run_rejects: torch.Tensor
+    energies: tensor
+    conformations: tensor
+    boltzmen: tensor
+    alphas: tensor
+    betas: tensor  
+    run_accepts: tensor
+    run_rejects: tensor
     
     """ 
     Run Output Container Class
     :param annealers: A list of Annealer objects used in the run
     :param energies: A tensor of energy values 
     :param conformations: A tensor of conformations
-    :param ratios: A tensor of acceptance ratios 
     :param boltzmen: A tensor of boltzmann values 
     :param alpha: Bond angle vector 
     :param beta: Torsion angle vector
     :param run_accepts: Tensor of num_accepts per run
     :param run_rejects: Tensor of num_rejects per run
     """
-
+    def __init__(self, annealers:list, energies:tensor, conformations:tensor, boltzmen:tensor, alphas:tensor, betas:tensor, run_accepts:tensor, run_rejects:tensor): 
+        self.annealers = annealers
+        self.energies = energies
+        self.conformations = conformations
+        self.boltzmen = boltzmen
+        self.alphas = alphas
+        self.betas = betas
+        self.run_accepts = run_accepts
+        self.run_rejects = run_rejects
+    
+    # Annealers are not included
+    def to_dict(self): 
+        return { 
+            'energies': self.energies.tolist(), 
+            'conformations': self.conformations.tolist(),
+            'boltzmen': self.boltzmen.tolist(), 
+            'alphas': self.alphas.tolist(), 
+            'betas': self.betas.tolist(),
+            'run_accepts': self.run_accepts.tolist(), 
+            'run_rejects': self.run_rejects.tolist()
+        }
 # Optimizer Object
-@dataclass
 class solutionObject: 
-    alpha: torch.tensor # N-2
-    beta: torch.tensor # N-3
+    alpha: tensor # N-2
+    beta: tensor # N-3
     optimal_energies: float
-    optimal_conformations: torch.tensor
-    temps: torch.tensor
-    runOutputs: list[runOutput]
+    optimal_conformations: tensor
+    temps: tensor
+    runOutputs: list
     
     
     """ 
     An object containing the solution data
     :param optimal_energies: Best energy value
     :param optimal_conformations: Best conformation
-    :param temps: Temperatures 
-    :param boltzmen: A tensor of boltzmann values 
+    :param temps: Temperatures  
     :param alpha: Bond angle vector 
     :param beta: Torsion angle vector
-    :param num_accepts: The number of transitions
-    :param num_rejects: The number of rejections
+    :param runOutput: A list of runOutput objects
     """
+    
+    def __init__(self, alpha:tensor, beta:tensor, optimal_energies:tensor, optimal_conformations:tensor, temps:tensor, runOutputs:list):
+        self.alpha = alpha
+        self.beta = beta
+        self.optimal_energies = optimal_energies
+        self.optimal_conformations = optimal_conformations
+        self.temps = temps
+        self.runOutputs = runOutputs
+
+    def to_dict(self): 
+        return { 
+            'alpha': self.alpha.tolist(), 
+            'beta': self.beta.tolist(), 
+            'optimal_energies': self.optimal_energies.tolist(), 
+            'optimal_conformations': self.optimal_conformations.tolist(),
+            'temps': self.temps.tolist(), 
+            'runOutputs': self.runOutputs
+        }
 
 # Annealer
 @dataclass 
@@ -63,11 +95,11 @@ class Annealer:
     lam: float
     ml: int
     index: int
-    residues: torch.Tensor
+    residues: tensor
     no_temps: int
     device_id: str=None
-    alpha: torch.Tensor=None
-    beta: torch.Tensor=None
+    alpha: tensor=None
+    beta: tensor=None
     k_1: float = -1.0
     k_2: float = 0.5
     
@@ -84,10 +116,23 @@ class Annealer:
     :param k_1: Interaction strength parameter
     :param k_2: Interaction strength parameter 
     """
-
+    def __init__(self, temp:float, lam:float, ml:int, index:int, residues:tensor, no_temps:int, device_id=None, alpha:tensor=None, beta:tensor=None, k_1:float=-1.0, k_2:float=0.5):
+        self.temp = temp
+        self.lam = lam 
+        self.ml = ml
+        self.index = index
+        self.residues = residues
+        self.no_temps = no_temps
+        self.device_id = "" if device_id is None else device_id
+        self.alpha = -torch.pi + torch.rand((residues.shape[0]-2,))*2*torch.pi if alpha is None else alpha
+        self.beta = -torch.pi + torch.rand((residues.shape[0]-3,))*2*torch.pi if beta is None else beta 
+        self.k_1 = k_1 
+        self.k_2 = k_2 
+    
     def __eq__(self, other): 
-        return torch.equal(self.alpha, other.alpha) and torch.equal(self.beta, other.beta)
-    def get_coefficient(self) -> torch.tensor:
+        return torch.equal(self.alpha, other.alpha) and torch.equal(self.beta, other.beta) and self.lam == other.lam
+
+    def get_coefficient(self) -> tensor:
         """
         
         Return the coefficient determining the strength of interactions between two residues.
@@ -101,7 +146,7 @@ class Annealer:
         coeff_matrix[coeff_matrix == 0] = 0.5
         return coeff_matrix
     
-    def get_conformation(self, alpha, beta) -> torch.tensor: 
+    def get_conformation(self, alpha, beta) -> tensor: 
         
         """
         
@@ -172,14 +217,6 @@ class Annealer:
         :returns  output: annealerOutput
         :raises ValueError: if angle vectors are of improper dimensions
         """
-        
-        # Initializations
-        if self.alpha is None: 
-            self.alpha = -torch.pi + 2*torch.pi*torch.rand(size=(self.residues.shape[0]-2,))
-        
-        if self.beta is None: 
-            self.beta = -torch.pi + 2*torch.pi*torch.rand(size=(self.residues.shape[0]-3,))
-        
         if(self.alpha.shape[0] !=  self.residues.shape[0]-2 or self.beta.shape[0] != self.residues.shape[0]-3): 
             raise ValueError(f'The angle vectors are not of the appropriate dimensionality.{self.alpha.shape[0]}, {self.beta.shape[0]}')
         
@@ -243,14 +280,13 @@ class Annealer:
 
 
 #  Return type for each markov chain step
-@dataclass
 class annealerOutput: 
     annealer: Annealer
-    energies: torch.Tensor
-    conformations: torch.Tensor
-    boltzmen: torch.Tensor
-    alpha: torch.Tensor
-    beta: torch.Tensor
+    energies: tensor
+    conformations: tensor
+    boltzmen: tensor
+    alpha: tensor
+    beta: tensor
     num_accepts: float
     num_rejects: float
     
@@ -266,6 +302,15 @@ class annealerOutput:
     :param num_accepts: Number of transitions 
     :param num_rejects: Number of rejections
     """
+    def __init__(self, annealer: Annealer, energies:tensor, conformations:tensor, boltzmen:tensor, alpha:tensor, beta:tensor, num_accepts: float, num_rejects: float): 
+        self.annealer = annealer
+        self.energies = energies
+        self.conformations = conformations
+        self.boltzmen = boltzmen
+        self.alpha = alpha
+        self.beta = beta
+        self.num_accepts = num_accepts
+        self.num_rejects = num_rejects
 
 def get_child(p1: Annealer, p2: Annealer)->Annealer:
     """ 
@@ -274,8 +319,8 @@ def get_child(p1: Annealer, p2: Annealer)->Annealer:
     :returns daughter: A daughter annealer 
     """
     # Determine whether a mutation will take place
-    mutation = True if torch.randint(1, 1001, (1,)).item() == 313 else False
-
+    mutation = True if torch.randint(1, 100, (1,)).item() == 42 else False # 42 is the answer to everything
+    
     # Compute the daughter characteristics
     lam_d = (2*p1.lam*p2.lam)/(p1.lam + p2.lam) # Harmonic mean
     rano_a, rano_b = torch.randint(0, p1.alpha.shape[0]-1, (1,)).item(), torch.randint(0, p2.beta.shape[0]-1, (1,)).item()
@@ -294,7 +339,7 @@ def get_child(p1: Annealer, p2: Annealer)->Annealer:
         else:
             # Prevents out of bound errors
             alpha_d[random_i] = alpha_d[random_i]+change if torch.abs(alpha_d[random_i]+change) < torch.pi else alpha_d[random_i]-change
-
+    
     # Return the child as an Annealer object
     childargs = { 
         'temp': p1.temp,
@@ -318,7 +363,7 @@ class GeneticAnnealer:
     ml: int 
     quality_factor: float
     lam: float
-    residues: torch.Tensor
+    residues: tensor
     index: int
     
     """
@@ -336,11 +381,9 @@ class GeneticAnnealer:
         """ 
         :param cpu_id: The ID of the core 
         :param temp: The current annealing temperature 
-        :param annealerObject: A preinitialized annealer that is updated to the current temperature. None by default 
+        :param annealerObject: A preinitialized annealer that is updated to the current temperature.
         :returns results: A list of annealerOutput objects
         """
-        
-        # If annealers are generated, update their core_id and temperature before annealing
         annealerObject.index = self.index
         annealerObject.temp = temp
         annealerObject.device_id = cpu_id
@@ -382,10 +425,11 @@ class GeneticAnnealer:
         
         #Accept the parents with relative fitness greater than 0.5
         parents = []
-        for i in range(len(fit)): 
-            if fit[i] > 0.5: 
-                parents.append(annealers[i])
-        
+        for i in range(len(fit)//2+1): 
+          if fit[i] > 0.5:
+            parents.append(annealers[i])
+        if len(parents) <= 1: 
+            parents = annealers[0:(len(fit)//2+1)]
         # Compute the weighted probability list based on the geometric progression
         probability_ratios = 2**torch.arange(0, len(parents), 1)
         probability_ratios = probability_ratios.tolist()[::-1]
@@ -394,11 +438,9 @@ class GeneticAnnealer:
         while len(population) < len(annealers):
             p1 = weighted_parents[random.randint(0, len(weighted_parents)-1)] 
             p2 = weighted_parents[random.randint(0, len(weighted_parents)-1)]
-            while (p1.__eq__(p2) and len(parents) != 1): 
-                p2 = weighted_parents[random.randint(0, len(weighted_parents)-1)]
             child = get_child(p1,p2)
             energy_diff=child.get_energy(child.alpha, child.beta) - parents[-1].get_energy(parents[-1].alpha, parents[-1].beta)  
-            if energy_diff < 0 or torch.exp(-energy_diff/self.temp) > torch.rand(1,).item(): 
+            if energy_diff < 0 or torch.exp(-energy_diff/self.temp) >= torch.rand(1,).item(): 
                 population.append(child)
         return population
           
@@ -416,7 +458,6 @@ class GeneticAnnealer:
                 'device_id': i, 
                 }
                 annealers.append(Annealer(**args))
-                
             
         # Checks to make sure the number of cores is sufficient
         if self.num_annealers > multiprocessing.cpu_count(): 
@@ -459,7 +500,7 @@ class GeneticAnnealer:
         # Initializations
         temps = torch.zeros(self.num_iterations,)
         initial_run = self.run()
-        outputs.append(initial_run)
+        outputs.append(initial_run.to_dict())
         population_energies = torch.zeros(self.num_annealers ,self.ml*self.num_iterations)
         new_annealers = self.crossover(initial_run) 
         self.temp_updater(self.temp, initial_run)
@@ -467,7 +508,7 @@ class GeneticAnnealer:
             temps[i]=(self.temp)
             run = self.run(new_annealers)
             self.index+=1
-            outputs.append(run)
+            outputs.append(run.to_dict())
             population_energies[:, i*self.ml:(i+1)*self.ml] = run.energies
             new_annealers = self.crossover(run) 
             self.temp_updater(self.temp, run)
@@ -482,23 +523,3 @@ class GeneticAnnealer:
         return solutionObject(**solutionArgs)
     
 
-testargs = { 
-    'num_iterations': 10, 
-    'temp': 100, 
-    'num_annealers': 8, 
-    'ml': 1000, 
-    'quality_factor': 1.5,
-    'lam': 3,
-    'residues': torch.Tensor([0,1,0,1,0,0,1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0]),
-    'index': 0
-}
-x = GeneticAnnealer(**testargs)
-if __name__ == "__main__": 
-    output = x.optimize()           
-    for i in range(len(output.runOutputs)-1): # Each run
-        for j in range(testargs['num_annealers']):
-            plt.title(label=f"Energy Values Across Annealers | Run: {i}")
-            plt.plot(torch.arange(1, testargs['ml']+1, 1), output.runOutputs[i].energies[j], label=f'core_{j}')
-        plt.legend() 
-        plt.show()
-        plt.close()

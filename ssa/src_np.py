@@ -19,15 +19,15 @@ class AnnealerOutput:
 
     def to_dict(self): 
         return { 
-            'alpha': self.alpha, 
-            'beta': self.beta, 
-            'energies': self.energies, 
-            'conformations': self.conformations, 
+            'alpha': self.alpha.tolist(), 
+            'beta': self.beta.tolist(), 
+            'energies': self.energies.tolist(), 
+            'conformations': self.conformations.tolist(), 
             'optimal_energy': self.optimal_energy, 
-            'optimal_conformation': self.optimal_conformation, 
-            'p_num_accepts': self.p_num_accepts, 
-            'p_num_rejects': self.p_num_rejects, 
-            'residues': self.residues
+            'optimal_conformation': self.optimal_conformation.tolist(), 
+            'p_num_accepts': self.p_num_accepts.tolist(), 
+            'p_num_rejects': self.p_num_rejects.tolist(), 
+            'residues': self.residues.tolist()
         }
 def get_coefficient(
     residues: ArrayLike
