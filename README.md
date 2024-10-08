@@ -33,6 +33,8 @@ A PyTorch version was written for the future to take advantage of GPU accelerati
 
 ## v1.5 
 Access to high performance computing allows for parallel annealing runs. The annealer was run 10 times independently for artificial proteins [`ml=10000`]. 
+### LAMMPS Dump Files
+From now on, conformation data will be stored in LAMMPS (Large Scale Atomic/Molecular Massively Parallel Simulator) DUMP files. This allows conformation visualization in softwares like OVITO. 
 
 # Genetic Annealing 
 The implemented hybrid optimization algorithm aims to maximize the efficiency of the simulated annealing algorithm by patching some of its limitations, namely the high time cost. 
@@ -40,3 +42,8 @@ The algorithm runs a population of annealers in parallel. The relative fitness i
 
 ## v1.1 
 The first working version was implemented in PyTorch. It had faster convergence than serial simulated annealing but always converged to suboptimal local minima. Further versions will be invested in to adjust the cooling schedule and fitness determination.
+
+## v1.2 
+A NumPy version was implemented to take advantage of `np.savetxt()` making LAMMP DUMP file creation easier.
+### LAMMPS Dump Files
+From now on, conformation data will be stored in LAMMPS (Large Scale Atomic/Molecular Massively Parallel Simulator) DUMP files. This allows conformation visualization in softwares like OVITO. 
