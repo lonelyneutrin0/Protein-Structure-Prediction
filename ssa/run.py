@@ -22,7 +22,7 @@ def example(input_protein):
         'end_temp': 1e-12, 
         'gamma': 0.99,
         'lam': 3.0,
-        'ml': 100
+        'ml': 50000
     }
    
     num_steps = (int)(np.log10(kwargs['end_temp']/kwargs['start_temp'])/np.log10(kwargs['gamma']))
@@ -31,7 +31,7 @@ def example(input_protein):
     run = n_annealer(**kwargs) 
     present = time.perf_counter()
     sec_elapsed = present - past
-    print(f'Time elapsed: {sec_elapsed}')
+    # print(f'Time elapsed: {sec_elapsed}')
     return run
     
 # example("ABAABBAAABAAAABABAAABAABBAABBBAABABBAABAAAAAAAAAABAAABA") #1FCA

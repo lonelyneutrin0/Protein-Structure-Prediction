@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from numpy.typing import ArrayLike
 from numpy.random import randint 
 import time 
+import gzip 
+import io 
 
 @dataclass
 class AnnealerOutput:
@@ -29,6 +31,7 @@ class AnnealerOutput:
             'p_num_rejects': self.p_num_rejects.tolist(), 
             'residues': self.residues.tolist()
         }
+
 def get_coefficient(
     residues: ArrayLike
 ) -> float: 
@@ -43,7 +46,8 @@ def get_coefficient(
     :param i: First residue 
     :param j: Second residue  
     """
-    coeff = residues[:, np.newaxis]*residues 
+    residues = residues.astype(float)
+    coeff = residues[:, np.newaxis]*residues
     coeff[coeff == 0] = 0.5
     return coeff
 
@@ -165,10 +169,12 @@ def n_annealer(
         raise ValueError(f'The angle vectors are not of the appropriate dimensionality.')
     
     # Initializations 
-
+    
     # Force integer number of iterations
     num_iterations = (int)(np.log10(end_temp/start_temp)/np.log10(gamma))
-    
+    buffer = io.StringIO()
+    index_arr = np.arange(1, num_iterations*ml*residues.shape[0]+1).reshape(num_iterations, ml, residues.shape[0])+residues.shape[0]
+    buffer.write(f'ITEM: TIMESTEP\n{residues.shape[0]}\nITEM: NUMBER OF ATOMS\n{residues.shape[0]}\nITEM: BOX BOUNDS pp pp pp\n-10.0 10.0\n-10.0 10.0\n-10.0 10.0\nITEM: ATOMS')
     inv_temps = 1/start_temp*np.power(1/gamma, np.arange(num_iterations))
     energies = np.zeros(num_iterations)
     conformations = np.zeros((num_iterations, residues.shape[0], 3))
@@ -179,6 +185,7 @@ def n_annealer(
         beta=beta_v, 
         size=residues.shape[0]
     )
+    np.savetxt(buffer, np.concatenate((np.arange(1, conformation.shape[0]+1).reshape(conformation.shape[0], 1), conformation), axis=1), fmt=["%.0f", "%.2f", "%.2f", "%.2f"], header=' id x y z', comments='')
     coeff = get_coefficient(residues)
     args = {
         'alpha':alpha_v,
@@ -217,7 +224,8 @@ def n_annealer(
                 beta=new_beta_v, 
                 size=residues.shape[0]
             )
-        
+            buffer.write(f'ITEM: TIMESTEP\n{residues.shape[0]}\nITEM: NUMBER OF ATOMS\n{residues.shape[0]}\nITEM: BOX BOUNDS pp pp pp\n-10.0 10.0\n-10.0 10.0\n-10.0 10.0\nITEM: ATOMS\n')
+            np.savetxt(buffer, np.concatenate((index_arr[step, i].reshape(residues.shape[0],1), new_conformation), axis=1), fmt=["%.0f", "%.2f", "%.2f", "%.2f"], comments='')
             args['alpha'], args['beta'], args['conformation'] = new_alpha_v, new_beta_v, new_conformation
             # Calculate the changes in energy level
             new_energy = get_energy(**args) 
@@ -239,7 +247,8 @@ def n_annealer(
                 rejects[step] = 1
         print(f'{step+1} Iteration, {num_iterations-step-1} Remaining \n Time Elapsed: {time.perf_counter()-past}')
     num_accepts, num_rejects = np.cumsum(accepts, axis=0), np.cumsum(rejects, axis=0)
-    
+    with gzip.open("ssa/run.dump.gz", "wt", encoding='utf-8') as f:
+        f.write(buffer.getvalue())
     annealing_attributes = { 
         'alpha': alpha_v,
         'beta': beta_v,
