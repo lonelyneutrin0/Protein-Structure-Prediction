@@ -32,7 +32,7 @@ The file `src_np.py` utilizing NumPy delivers results within ~0.5 energy units o
 A PyTorch version was written for the future to take advantage of GPU acceleration. The NumPy version was tested on the protein 4RXN and yielded an energy value `-172.059076`, close to the optimal value of `-174.612`. The annealing took just over 15 hours.
 
 ## v1.5 
-Access to high performance computing allows for parallel annealing runs. The annealer was run 10 times independently for artificial proteins [`ml=10000`]. 
+Access to high performance computing allows for parallel annealing runs. The annealer was run 10 times independently for artificial proteins [`ml=50000`].
 ### LAMMPS Dump Files
 From now on, conformation data will be stored in LAMMPS (Large Scale Atomic/Molecular Massively Parallel Simulator) DUMP files. This allows conformation visualization in softwares like OVITO. 
 
