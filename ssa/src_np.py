@@ -173,8 +173,6 @@ def n_annealer(
     # Force integer number of iterations
     num_iterations = (int)(np.log10(end_temp/start_temp)/np.log10(gamma))
     buffer = io.StringIO()
-    index_arr = np.arange(1, num_iterations*ml*residues.shape[0]+1).reshape(num_iterations, ml, residues.shape[0])+residues.shape[0]
-    buffer.write(f'ITEM: TIMESTEP\n{residues.shape[0]}\nITEM: NUMBER OF ATOMS\n{residues.shape[0]}\nITEM: BOX BOUNDS pp pp pp\n-10.0 10.0\n-10.0 10.0\n-10.0 10.0\nITEM: ATOMS')
     inv_temps = 1/start_temp*np.power(1/gamma, np.arange(num_iterations))
     energies = np.zeros(num_iterations)
     conformations = np.zeros((num_iterations, residues.shape[0], 3))
@@ -185,7 +183,6 @@ def n_annealer(
         beta=beta_v, 
         size=residues.shape[0]
     )
-    np.savetxt(buffer, np.concatenate((np.arange(1, conformation.shape[0]+1).reshape(conformation.shape[0], 1), conformation), axis=1), fmt=["%.0f", "%.2f", "%.2f", "%.2f"], header=' id x y z', comments='')
     coeff = get_coefficient(residues)
     args = {
         'alpha':alpha_v,
@@ -224,8 +221,15 @@ def n_annealer(
                 beta=new_beta_v, 
                 size=residues.shape[0]
             )
-            buffer.write(f'ITEM: TIMESTEP\n{residues.shape[0]}\nITEM: NUMBER OF ATOMS\n{residues.shape[0]}\nITEM: BOX BOUNDS pp pp pp\n-10.0 10.0\n-10.0 10.0\n-10.0 10.0\nITEM: ATOMS\n')
-            np.savetxt(buffer, np.concatenate((index_arr[step, i].reshape(residues.shape[0],1), new_conformation), axis=1), fmt=["%.0f", "%.2f", "%.2f", "%.2f"], comments='')
+            if(i%100 == 0): 
+                index = step * ml/100 + i/100
+                index_arr = np.arange(1+new_conformation.shape[0]*index, (index+1)*new_conformation.shape[0]+1)
+                if index == 0:  
+                    buffer.write(f'ITEM: TIMESTEP\n{residues.shape[0]}\nITEM: NUMBER OF ATOMS\n{residues.shape[0]}\nITEM: BOX BOUNDS pp pp pp\n-10.0 10.0\n-10.0 10.0\n-10.0 10.0\nITEM: ATOMS')
+                    np.savetxt(buffer, np.concatenate((index_arr.reshape(new_conformation.shape[0], 1), new_conformation), axis=1), fmt=["%.0f", "%.2f", "%.2f", "%.2f"], header=' id x y z', comments='')
+                else: 
+                    buffer.write(f'ITEM: TIMESTEP\n{residues.shape[0]}\nITEM: NUMBER OF ATOMS\n{residues.shape[0]}\nITEM: BOX BOUNDS pp pp pp\n-10.0 10.0\n-10.0 10.0\n-10.0 10.0\nITEM: ATOMS\n')
+                    np.savetxt(buffer, np.concatenate((index_arr.reshape(new_conformation.shape[0], 1), new_conformation), axis=1), fmt=["%.0f", "%.2f", "%.2f", "%.2f"], comments='')
             args['alpha'], args['beta'], args['conformation'] = new_alpha_v, new_beta_v, new_conformation
             # Calculate the changes in energy level
             new_energy = get_energy(**args) 
@@ -270,4 +274,7 @@ def artificial_protein(n):
     for i in range(2, n + 1):
         concatenated = np.concatenate((S[i-2], S[i-1]))
         S.append(concatenated)
-    return S[n]
+    nums = S[n]
+    result = ''.join(['A' if element == 1 else 'B' for element in nums])
+    return result
+

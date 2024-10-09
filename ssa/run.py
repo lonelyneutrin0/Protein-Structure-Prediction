@@ -33,9 +33,9 @@ def example(input_protein):
     sec_elapsed = present - past
     # print(f'Time elapsed: {sec_elapsed}')
     return run
-    
+run_object = example(artificial_protein(7)).to_dict()
 # example("ABAABBAAABAAAABABAAABAABBAABBBAABABBAABAAAAAAAAAABAAABA") #1FCA
 with gzip.open(f"ssa/run.json.gz", "wt", encoding='utf-8') as f:
-    run_object = example("ABBABBAABABBA").to_dict()
+    
     print(f"Optimal Energy: {run_object['energies'][-1]}")
     json.dump(run_object, f, indent=4)
