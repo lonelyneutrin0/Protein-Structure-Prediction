@@ -1,4 +1,4 @@
-from src_np import GeneticAnnealer, artificial_protein
+from ga.src_np import GeneticAnnealer, artificial_protein
 import numpy as np
 import gzip 
 import json 
