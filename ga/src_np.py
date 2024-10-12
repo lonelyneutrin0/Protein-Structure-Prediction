@@ -9,9 +9,19 @@ from dataclasses import dataclass
 import numpy as np 
 import multiprocessing
 import matplotlib.pyplot as plt 
+boltzmann = 1.380649e-23
 
 # Problem statement Classes and Functions
  
+def artificial_protein(n):
+    S = [np.array([1]), np.array([0])]
+
+    for i in range(2, n + 1):
+        concatenated = np.concatenate((S[i-2], S[i-1]))
+        S.append(concatenated)
+    nums = S[n]
+    return nums
+
 def get_conformation(
     size: int, 
     alphas: np.ndarray, 
@@ -29,9 +39,15 @@ def get_conformation(
     :raises ValueError: If the size is less than 3
     
     """
-    
+
     if(size < 3): 
         raise ValueError(f'Make sure your number of residues is greater than 3')
+    
+    # If the population size is 1, convert size <4> to <1,4>
+    if population_size == 1: 
+        alphas = alphas[np.newaxis, :]
+        betas = betas[np.newaxis, :]
+    
     cos_alpha = np.cos(alphas)
     cos_beta = np.cos(betas)
     sin_alpha = np.sin(alphas)
@@ -75,6 +91,12 @@ def get_energy(
     
     """
     
+    # If the population size is 1, convert size <4> to <1,4>
+    if population_size == 1: 
+        alphas = alphas[np.newaxis, :]
+        betas = betas[np.newaxis, :]
+        conformations = conformations[np.newaxis, :, :]
+
     backbone_bending_energy = -k_1 * np.sum(np.cos(alphas), axis=-1)
     torsion_energy = -k_2 * np.sum(np.cos(betas), axis=-1)
     
@@ -163,7 +185,7 @@ class optimizer:
     :param init_beta: An initial beta chromosome 
     :param step: The current iteration of the optimizer
     """
-
+    
     def __init__(self, T_0, protein, population_size, p_c=0.8, ml=10000, num_iterations=3000, lam=3.0, init_alpha=None, init_beta=None, step=0):
         self.T_0 = T_0
         self.protein = protein 
@@ -178,7 +200,11 @@ class optimizer:
         self.step = step
         
     def anneal(self, x: genotype): 
-        # In the context here, optimal energy is of this annealer, not of the overall optimization 
+        # Optimal energy is of this annealer, not of the overall optimization 
+        optimal_alpha = x.alpha
+        optimal_beta = x.beta
+        optimal_energy = x.energy
+        optimal_conformation = x.conformation
         for j in range(self.ml): 
             # Mutation 
             new_alpha = x.alpha.copy()
@@ -196,25 +222,39 @@ class optimizer:
             # Determine the new genotype characteristics
             new_conformation = get_conformation(self.protein.shape[0], new_alpha, new_beta)
             new_energy = get_energy(new_alpha, new_beta, self.protein, new_conformation, self.coeff)
-
-            if self.step == 0: 
+            
+            # Always accept the initial few states
+            if self.step in range(10): 
                 x.alpha = new_alpha
                 x.beta = new_beta 
                 x.energy = new_energy
-                
+                continue 
 
+            # Use the Boltzmann criterion to determine whether a neighbor is accepted
+            if np.exp((x.energy-new_energy)/(boltzmann*self.T_0)) > np.random.uniform(): 
+                x.alpha = new_alpha
+                x.beta = new_beta 
+                x.energy = new_energy
 
+            # Update the optimal conformations 
+            if new_energy < optimal_energy: 
+                optimal_alpha = new_alpha
+                optimal_beta = new_beta
+                optimal_energy = new_energy
+                optimal_conformation = new_conformation
+        
+        return genotype(alpha=optimal_alpha, beta=optimal_beta, energy=optimal_energy, conformation=optimal_conformation)     
+    
     def optimize(self): 
         # Initializations 
         if self.population_size > multiprocessing.cpu_count(): raise ValueError(f'That population exceeds the number of available cores.')
-        # Generate the coefficient matrix using the Kronecker product
         
         # Generate the required initial population based on whether an initial genotype is provided or not         
         if self.init_alpha is None or self.init_beta is None:
             
             # Generate initial alpha and beta chromosome batches
-            alphas = -np.pi + np.random.uniform(low=0.0, high=1.0, size=(self.population_size, self.protein.shape[0]-2))*2*np.pi
-            betas = -np.pi + np.random.uniform(low=0.0, high=1.0, size=(self.population_size, self.protein.shape[0]-3))*2*np.pi
+            alphas = np.random.uniform(low=-np.pi, high=np.pi, size=(self.population_size, self.protein.shape[0]-2))
+            betas = np.random.uniform(low=-np.pi, high=np.pi, size=(self.population_size, self.protein.shape[0]-3))
             
             # Generate the population 
             population = [genotype(alphas[i], betas[i]) for i in range(self.population_size)]
@@ -233,7 +273,7 @@ class optimizer:
         population_conformations = get_conformation(self.protein.shape[0], alphas, betas, self.population_size)
         population_energies = get_energy(alphas, betas, self.protein, population_conformations, self.coeff, self.population_size)
 
-        for i in range(population): 
+        for i in range(len(population)): 
             population[i].conformation = population_conformations[i]
             population[i].energy = population_energies[i]
         
@@ -255,7 +295,7 @@ class optimizer:
                 
                 if np.random.uniform() > self.p_c: 
                     # Choose the best and better elements of the subset population
-                    best, better = subset_genotypes[np.argsort(subset_fitness)[:2][0]], subset_genotypes[np.argsort(subset_fitness)[:2][1]] 
+                    best, better = subset_genotypes[np.argsort(subset_fitness)[0]], subset_genotypes[np.argsort(subset_fitness)[1]] 
                     
                     # Produce a child from these parents 
                     ran_alpha = np.random.randint(low=0, high=best.alpha.shape[0])
@@ -267,11 +307,67 @@ class optimizer:
                     new_population.append(genotype(child_alpha, child_beta, elite=False))
 
         for i in range(self.num_iterations):
+            # Update the step and temperature
             self.step = i
-            
-        
+            self.T_0 = 0.99*self.T_0
+            # Start parallel processing 
+            with multiprocessing.Pool(processes=self.population_size) as pool: 
 
-test_protein = np.array([1,0,1,0,1,1])
-x = optimizer(100, test_protein, 20)
-x.optimize()
-    
+                # Anneal each of the genotypes in parallel and collect the mutated population
+                mutated_population=pool.map(self.anneal, new_population)
+            # Collect the characteristics of the population and perform fitness evaluations 
+            mutated_population_conformations = np.zeros((self.population_size, self.protein.shape[0], 3))
+            mutated_population_energies = np.zeros(self.population_size)
+            
+            for i in range(len(mutated_population)): 
+                mutated_population_conformations[i] = mutated_population[i].conformation
+                mutated_population_energies[i] = mutated_population[i].energy
+            
+            # Perform tournament search and produce the new population 
+            new_population = []
+            while len(new_population) < self.population_size: 
+                best = None 
+                better = None 
+                while best is None or better is None: 
+                    
+                    # Generate a random subset of the population
+                    indices = np.random.randint(low=0,high=self.population_size,size= 5)
+                    subset_genotypes = []
+                    for i in indices: 
+                        subset_genotypes.append(mutated_population[i])
+                    
+                    # Compute the fitness of those elements
+                    subset_fitness = mutated_population_energies[indices]
+                    
+                    if np.random.uniform() > self.p_c: 
+                        # Choose the best and better elements of the subset population
+                        best, better = subset_genotypes[np.argsort(subset_fitness)[:2][0]], subset_genotypes[np.argsort(subset_fitness)[:2][1]] 
+                        
+                        # Produce a child from these parents 
+                        ran_alpha = np.random.randint(low=0, high=best.alpha.shape[0])
+                        ran_beta = np.random.randint(low=0, high=best.beta.shape[0])
+                        
+                        child_alpha = np.concatenate((best.alpha[:ran_alpha], better.alpha[ran_alpha:])) 
+                        child_beta = np.concatenate((best.beta[:ran_beta], better.beta[ran_beta:]))
+                        
+                        new_population.append(genotype(child_alpha, child_beta, elite=False))
+            print(f"Cycle Success!")
+        # At the end of the for loop, we have an optimal solution somewhere in the population 
+        optimal_population = new_population
+        optimal_population_energies = np.zeros(self.population_size)
+        optimal_population_conformations = np.zeros((self.population_size, self.protein.shape[0], 3))
+        
+        # Collect population data
+        for i in range(optimal_population): 
+            optimal_population_energies[i] = optimal_population[i].energy
+            optimal_population_conformations[i] = optimal_population[i].conformation
+        
+        optimal_genotype = optimal_population[np.argsort(optimal_population_energies)[0]]
+        
+        return optimal_genotype
+
+test_protein = np.array(artificial_protein(6))
+x = optimizer(T_0=1.0, protein=test_protein, population_size=5, ml=100, num_iterations=100)
+if __name__ == '__main__':
+    solution = x.optimize()
+    print(f'Optimal Energy: {solution.energy}')
