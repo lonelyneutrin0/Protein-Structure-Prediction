@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import numpy as np 
 import multiprocessing
 import matplotlib.pyplot as plt 
+import time 
 boltzmann = 1.380649e-23
 
 # Problem statement Classes and Functions
@@ -200,6 +201,7 @@ class optimizer:
         self.step = step
         
     def anneal(self, x: genotype): 
+        past = time.perf_counter()
         # Optimal energy is of this annealer, not of the overall optimization 
         optimal_alpha = x.alpha
         optimal_beta = x.beta
@@ -211,7 +213,6 @@ class optimizer:
             new_beta = x.beta.copy()
             ran_i = np.random.randint(x.alpha.shape[0]+x.beta.shape[0])
             change = (np.random.uniform()-0.5)*np.random.uniform()*(1-self.step/self.num_iterations)**self.lam
-
             if ran_i >= x.alpha.shape[0]: 
                 # Prevents out of bound errors
                 new_beta[ran_i - new_alpha.shape[0]] = new_beta[ran_i- new_alpha.shape[0]] + change if np.abs(new_beta[ran_i - new_alpha.shape[0]] + change) < np.pi else new_beta[ran_i- new_alpha.shape[0]]-change
@@ -221,28 +222,27 @@ class optimizer:
         
             # Determine the new genotype characteristics
             new_conformation = get_conformation(self.protein.shape[0], new_alpha, new_beta)
-            new_energy = get_energy(new_alpha, new_beta, self.protein, new_conformation, self.coeff)
+            new_energy = get_energy(new_alpha, new_beta, self.protein, new_conformation, self.coeff) 
             
-            # Always accept the initial few states
-            if self.step in range(10): 
-                x.alpha = new_alpha
-                x.beta = new_beta 
-                x.energy = new_energy
-                continue 
-
             # Use the Boltzmann criterion to determine whether a neighbor is accepted
-            if np.exp((x.energy-new_energy)/(self.T_0)) > np.random.uniform(): 
+            
+            if (new_energy-x.energy) < 0:
                 x.alpha = new_alpha
                 x.beta = new_beta 
                 x.energy = new_energy
-
+            
+            elif np.exp((x.energy-new_energy)/(self.T_0)) > np.random.uniform():
+                x.alpha = new_alpha
+                x.beta = new_beta 
+                x.energy = new_energy
+            
             # Update the optimal conformations 
             if new_energy < optimal_energy: 
                 optimal_alpha = new_alpha
                 optimal_beta = new_beta
                 optimal_energy = new_energy
                 optimal_conformation = new_conformation
-        
+        print(time.perf_counter() - past)
         return genotype(alpha=optimal_alpha, beta=optimal_beta, energy=optimal_energy, conformation=optimal_conformation)     
     
     def optimize(self): 
@@ -285,7 +285,7 @@ class optimizer:
             while best is None or better is None: 
                 
                 # Generate a random subset of the population
-                indices = np.random.randint(low=0,high=self.population_size,size= 5)
+                indices = np.random.randint(low=0,high=self.population_size,size= 3)
                 subset_genotypes = []
                 for i in indices: 
                     subset_genotypes.append(population[i])
@@ -293,7 +293,7 @@ class optimizer:
                 # Compute the fitness of those elements
                 subset_fitness = population_energies[indices]
                 
-                if np.random.uniform() > self.p_c: 
+                if np.random.uniform() < self.p_c: 
                     # Choose the best and better elements of the subset population
                     best, better = subset_genotypes[np.argsort(subset_fitness)[0]], subset_genotypes[np.argsort(subset_fitness)[1]] 
                     
@@ -319,6 +319,7 @@ class optimizer:
                 
                 # Anneal each of the genotypes in parallel and collect the mutated population
                 mutated_population=pool.map(self.anneal, current_population)
+
             # Collect the characteristics of the population and perform fitness evaluations 
             mutated_population_conformations = np.zeros((self.population_size, self.protein.shape[0], 3))
             mutated_population_energies = np.zeros(self.population_size)
@@ -328,6 +329,9 @@ class optimizer:
                 mutated_population_energies[i] = mutated_population[i].energy
  
             current_population = []
+            # Nepotism- Add the fittest and worst individual to the next population 
+            current_population.append(mutated_population[np.argsort(mutated_population_energies)[0]])
+            current_population.append(mutated_population[np.argsort(mutated_population_energies)[-1]])
             # Perform tournament search and produce the new population 
             while len(current_population) < self.population_size: 
                 best = None 
@@ -335,7 +339,7 @@ class optimizer:
                 while best is None or better is None: 
                     
                     # Generate a random subset of the population
-                    indices = np.random.randint(low=0,high=self.population_size,size= 5)
+                    indices = np.random.randint(low=0,high=self.population_size,size= 3)
                     subset_genotypes = []
                     for i in indices: 
                         subset_genotypes.append(mutated_population[i])
@@ -372,7 +376,7 @@ class optimizer:
         return optimal_genotype
 
 test_protein = np.array(artificial_protein(6))
-x = optimizer(T_0=1.0, protein=test_protein, population_size=8, ml=1000, num_iterations=100)
+x = optimizer(T_0=1.0, protein=test_protein, population_size=8, ml=50000, num_iterations=200, p_c=0.8)
 if __name__ == '__main__':
     solution = x.optimize()
     print(f'Optimal Energy: {solution.energy}')
