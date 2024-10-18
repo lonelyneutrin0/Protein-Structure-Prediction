@@ -8,6 +8,7 @@ import random
 from rich import print
 import os
 import json 
+
 class runOutput:
     annealers: list 
     energies: tensor

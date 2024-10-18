@@ -1,4 +1,3 @@
-# pytorch implementation 
 import torch 
 import numpy as np
 from numpy.random import randint
