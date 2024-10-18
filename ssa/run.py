@@ -24,6 +24,7 @@ def example(input_protein):
         'lam': 3.0,
         'ml': 50000
     }
+    
    
     num_steps = (int)(np.log10(kwargs['end_temp']/kwargs['start_temp'])/np.log10(kwargs['gamma']))
     # perform run

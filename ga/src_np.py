@@ -350,7 +350,7 @@ class optimizer:
                     if np.random.uniform() > self.p_c: 
                         # Choose the best and better elements of the subset population
                         best, better = subset_genotypes[np.argsort(subset_fitness)[:2][0]], subset_genotypes[np.argsort(subset_fitness)[:2][1]] 
-                        
+                         
                         # Produce a child from these parents 
                         ran_alpha = np.random.randint(low=0, high=best.alpha.shape[0])
                         ran_beta = np.random.randint(low=0, high=best.beta.shape[0])

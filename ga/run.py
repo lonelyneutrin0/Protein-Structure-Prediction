@@ -2,6 +2,7 @@ from ga.src_np import GeneticAnnealer, artificial_protein
 import numpy as np
 import gzip 
 import json 
+
 testargs = { 
     'num_iterations': 100 , 
     'temp': 1,
