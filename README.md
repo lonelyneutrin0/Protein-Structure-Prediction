@@ -38,7 +38,7 @@ From now on, conformation data will be stored in LAMMPS (Large Scale Atomic/Mole
 
 # Genetic Annealing 
 The implemented hybrid optimization algorithm aims to maximize the efficiency of the simulated annealing algorithm by patching some of its limitations, namely the high time cost. 
-The algorithm runs a population of annealers in parallel. The relative fitness is determined after each Markov chain step. Unfit individuals (<0.5) are culled and fit individuals are reproduced to produce daugther annealers with slight variations. The annealer continues until a fixed number of iterations are achieved. The temperature is adaptive and follows the Lam-Delosme cooling schedule. 
+The algorithm runs a population of solutions in parallel. The relative fitness is determined after each Markov chain step. Fit individuals are chosen to be parents of the next generation. The annealer continues until a fixed number of iterations are achieved. 
 
 ## v1.1 
 The first working version was implemented in PyTorch. It had faster convergence than serial simulated annealing but always converged to suboptimal local minima. Further versions will be invested in to adjust the cooling schedule and fitness determination.
@@ -47,3 +47,6 @@ The first working version was implemented in PyTorch. It had faster convergence 
 A NumPy version was implemented to take advantage of `np.savetxt()` making LAMMP DUMP file creation easier.
 ### LAMMPS Dump Files
 From now on, conformation data will be stored in LAMMPS (Large Scale Atomic/Molecular Massively Parallel Simulator) DUMP files. This allows conformation visualization in softwares like OVITO. 
+
+## v1.3 
+The final version of GA demonstrated faster convergence and higher precision. It outperformed serial simulated annealing, even for higher length proteins.
